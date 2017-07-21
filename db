@@ -1,0 +1,393 @@
+#!/bin/bash
+
+symptom_mult=3
+relationship_count=2
+
+#DB=arg2
+DB=arg3
+DB4=arg4
+dbname=mgh
+
+top1=30 # = limit
+top2=60 # limit
+
+echo
+echo "########### Neo4j database: ${DB}"
+echo "########### MySQL database: ${dbname}"
+echo
+
+
+###########################################################
+function usage
+{
+  echo
+  echo "usage for mgh on MySQL"
+  echo "  desc     : show description for tables"
+  echo "  showtables : show tables"
+  echo "  docs     :  top 50 rows in table"
+  echo "  text     :  top 50 rows in table"
+  echo "  blocks   :  top 50 rows in table"
+  echo "  authors  :  top 50 rows in table"
+  echo "  refs     :  top 50 rows in table"
+  echo "  countmgh : row count in tables"
+  echo "  deletemgh: delete all records in all tables - TREAT WITH CARE"
+  echo "  toptext : <first few characters of a document> : find top few lines of a document"
+  echo "    ex: ./db toptext 1742"
+  echo "  topauthors : retreive top authors based on number of documents authored"
+  echo "  findauth : <first few characters an author> : find top few authors "
+  echo "    ex: ./db findauth Ronald"
+  echo "  findauthindoc <doc name>   : find all authors from a document"
+  echo "    ex: ./db findauthindoc 2151"
+  echo "  deldoc <first few characters of doc>   : delete a doc from all tables in the database"
+  echo "    ex: ./db deldoc 2151"
+  echo "  viewdoc <first few characters of doc>   : view a doc from all tables in the database"
+  echo
+  echo "  delbib : delete from tables: bib and authorbib"
+  echo "  viewbib1 : view bib: docname, title, journal_title, doi, score - top numbers"
+  echo "  viewbib2 : view bib: docname, title, doi, score - top numbers"
+  echo "  viewau1) : view authorbib: doi, last, first - top numbers "
+  echo "  viewau2) : view authorbib: doi, last, first based on first number of chars of doi - top numbers "
+  echo
+  echo "usage for mgh on neo4j"
+  echo "  summary"
+  echo "  summary1"
+  echo "  schema_keys"
+  echo "  top_used_nodes"
+  echo "  get_docs <docid>"
+  echo "  get_nodes"
+  echo "  docsum <docid>"
+}
+
+#################################################################################################
+function schema_keys
+{
+  for nodetype in doc aut txt ref cap img 
+  do
+    echo 
+    echo "Node type: $nodetype"
+    cypher-shell "match (n:${nodetype}) where n:${DB}     return keys(n) limit 1;"
+  done
+
+  # get keys for relationships
+  for reltype in has_attribution part_of supports references 
+  do
+    echo 
+    echo "Relationship type: $reltype"
+    cypher-shell "match (n)-[r:${reltype}]-(m) where n:${DB} and m:${DB} return type(r), keys(r) limit 1;"
+  done
+  
+}
+
+#################################################################################################
+function summary
+{
+
+  echo "Count total for argument graph: ${DB}"
+  cypher-shell "match (n:${DB}) with count(n) as node_count
+    match (n:${DB})-[r]->(m) return node_count, count(r) as edge_count ;"
+
+  echo "node count by node type"
+  cypher-shell "match (n:${DB})
+    return distinct(labels(n)), count(*) as count order by count desc;"
+
+  echo "edge count by edge between node types"
+  cypher-shell "match (n:${DB})-[r]->(n1:${DB}) 
+    return distinct labels(n) as from, type(r) as edge, labels(n1) as to, count(*) as count 
+    order by edge, count desc;"
+}
+
+#################################################################################################
+function summary1
+{
+  cypher-shell "match (n) return 'Number of Nodes: ' + count(n) as output UNION
+    match ()-[]->() return 'Number of Relationships: ' + count(*) as output UNION
+    CALL db.labels() YIELD label RETURN 'Number of Labels: ' + count(*) AS output UNION
+    CALL db.relationshipTypes() YIELD relationshipType  RETURN 'Number of Relationships Types: ' + count(*) AS output UNION
+    CALL db.propertyKeys() YIELD propertyKey  RETURN 'Number of Property Keys: ' + count(*) AS output UNION
+    CALL db.constraints() YIELD description RETURN 'Number of Constraints:' + count(*) AS output UNION
+    CALL db.indexes() YIELD description RETURN 'Number of Indexes: ' + count(*) AS output UNION
+    CALL dbms.procedures() YIELD name RETURN 'Number of Procedures: ' + count(*) AS output;"
+
+  cypher-shell "call db.indexes();"
+  cypher-shell "call db.constraints();"
+
+  echo
+  echo "list configs: call dbms.listConfig()"
+  echo 
+  echo "for more procedures: https://neo4j.com/docs/operations-manual/current/reference/procedures/"
+  echo
+}
+  
+#################################################################################################
+function top_used_nodes
+{
+  cypher-shell "match (n:${DB}) 
+    return labels(n), n.count, n.docid, n.auid, n.refid order by n.count desc limit $top1;"
+}
+
+#################################################################################################
+function get_docs
+{
+  cypher-shell "match (n:${DB}:doc) return toInteger(${1}) as docid, n.pmid, substring(n.title, 0, 100) order by docid ;"
+}
+
+#################################################################################################
+function get_nodes
+{
+  cypher-shell "MATCH (a:${DB})-[r]->(b:${DB}) RETURN a, r, b limit 10;"
+  cypher-shell "MATCH (n:${DB}) RETURN labels(n), n limit $top1;"
+
+  cypher-shell "MATCH (a:${DB})-[r]->(b:${DB})
+    RETURN labels(a) AS This, type(r) as To, labels(b) AS That limit $top1;"
+}
+
+#################################################################################################
+function document_summary
+{
+  docid=$1
+  # aaaaa
+  
+  mysql $dbname -e "select docid, pmid, filename, issn, journal from docs where docid=$docid;" 
+  mysql $dbname -e "select docid, title from docs where docid=$docid;" 
+  mysql $dbname -e "select * from blocks where docid=$docid;"
+  mysql $dbname -e "
+    select 'authors', count(*) as count from authdoc where docid=$docid
+    union
+    select 'sentences', count(*) from text where docid=$docid and type='sent'
+    union
+    select 'lines', count(*) from text where docid=$docid and type='lines'
+    union
+    select 'refids (reference IDs that point to bibentries that are located in the reference list)', count(*) from refs where docid=$docid 
+    union
+    select 'bibentry\'s found (this number should be as close as possible to refids)', 
+      count(*) from refs where docid=$docid and not bibentry is NULL ;"
+
+  mysql $dbname -e "select type as 'reference type' from refs where docid=$docid limit 1 ;" 
+
+}
+
+#################################################################################################
+# main Main MAIN
+
+mghtables="docs authors authdoc blocks text refs images imagerefs claims" 
+
+if [ "$#" -lt "1" ]
+then
+  usage
+  exit
+else
+  opt=$1
+fi
+
+echo "input: " $@
+
+case $opt in
+"-usage") usage ;;
+
+# ---------- data for mgh graph database
+g) cypher-shell "match (n:${DB}) return labels(n), n ;" ;;
+gtxt) cypher-shell "match (n:${DB}) return labels(n), n ;" ;;
+
+# ---------- data for mgh database
+
+showtables) mysql $dbname -e "show tables;" ;;
+
+images2) 
+  for t in images imagerefs 
+  do
+    echo "############################################################## table: $t"
+    mysql $dbname -e "select * from $t;"
+  done
+  ;;
+
+desc) 
+  mysql $dbname -e "show tables ;"
+  for t in $mghtables
+  do
+    echo 
+    echo "############################################################## table: $t"
+    #echo "----------------- desc table: $t"
+    mysql $dbname -e "desc $t;"
+    #echo "----------------- show index table: $t"
+    #mysql $dbname -e "show index from $t ;"
+  done
+  ;;
+
+docs)      mysql $dbname -e "select docid, pmid, substring(title,1,60), doi, substring(journal,1,60) from docs ;" ;;
+docsp)     mysql $dbname -e "select docid, pmid, pmcid, pmcid_ver, doi, bibtype, journal from docs ;" ;;
+authors)   mysql $dbname -e "select * from authors limit $top2;" ;;
+authdoc)   mysql $dbname -e "select * from authdoc limit $top2;" ;;
+text)      mysql $dbname -e "select * from text where type='lines' limit 10;" 
+           mysql $dbname -e "select docid, type, linenumber, substring(text,1,80) from text where type='sent' limit 10;" 
+          ;;
+blocks)    mysql $dbname -e "select * from blocks;" ;;
+refs)      mysql $dbname -e "select * from refs    limit $top2;" ;;
+images)    mysql $dbname -e "select * from images  limit $top2;" ;;
+imagerefs) mysql $dbname -e "select * from imagerefs  limit $top2;" ;;
+
+countmgh) mysql $dbname -e "
+  select 'docs', count(*) from docs 
+  union
+  select 'authors', count(*) from authors
+  union
+  select 'authdoc', count(*) from authdoc
+  union
+  select 'blocks', count(*) from blocks
+  union
+  select 'text', count(*) from text
+  union
+  select 'refs', count(*) from refs
+  union
+  select 'images', count(*) from images
+  union
+  select 'imagerefs', count(*) from imagerefs
+  union
+  select 'claims', count(*) from claims;"
+  # check the graph database also
+  summary
+  ;;
+
+deletemgh)
+  tables1="authdoc authors docs"
+  for t in $tables1; do
+    echo "--------- delete from $t"
+    mysql $dbname -e "delete from $t;"
+  done
+  ;;
+
+toptext)
+  mysql $dbname -e "select * from text where doc like '${2}%' and type='lines' limit 10;"
+  mysql $dbname -e "select * from text where doc like '${2}%' and type='sent' limit 5;"
+  ;;
+
+topauthors) mysql $dbname -e "select author, count(*) as cnt from authors group by author order by cnt desc, author limit 10 ;" ;; 
+findauth) mysql $dbname -e "select * from authors where author like '${2}%' order by author limit 20;" ;;
+findauthindoc) mysql $dbname -e "select * from authors where doc like '${2}%';" ;;
+
+viewdoc)
+  limit=20
+  for t in $mghtables; do
+    echo "table: $t - limit $limit"
+    mysql $dbname -e "select * from $t where doc like '${2}%' limit $limit;"
+  done
+  ;;
+
+delbib)
+  for t in bib authorbib
+  do
+    mysql $dbname -e "select count(*) as 'record count in table $t before delete' from $t;"
+    echo "delete from table: $t"
+    mysql $dbname -e "delete from $t;"
+    mysql $dbname -e "select count(*) as 'record count in table $t after delete' from $t;"
+  done
+  ;;
+viewbib1) mysql $dbname -e "select substring(doc, 1, 20), substring(title, 1, 40), journal_title, url, score from bib limit 20;" ;;
+viewbib2) mysql $dbname -e "select substring(doc, 1, 10), substring(title, 1, 80), journal_title, score from bib limit 20;" ;;
+
+schema_keys) schema_keys;;
+summary1) summary1;;
+summary) summary;;
+docsum) document_summary $2 ;;
+top_used_nodes) top_used_nodes ;;
+get_docs) get_docs $2;;
+get_nodes) get_nodes ;;
+
+docs1) mysql $dbname -e "select docid, pmid, pmcid, doi, substring(title, 1, 50) as 'title...', filename, bibtype, journal from docs where docid=$2;" ;;
+docs2) mysql $dbname -e "select ad.docid, substring(d.title,1,60), d.pmid, ad.auid, a.last, a.first, a.middle, a.orcid
+  from authdoc ad
+  left join authors a on ad.auid = a.auid 
+  left join docs d on ad.docid = d.docid 
+  where ad.docid=$2;" 
+  ;;
+
+docs3) mysql $dbname -e "select docid, pmid, pmcid, doi, filename, bibtype, substring(title,1,60), journal from docs where pmid=$2;" ;;
+
+auth2) mysql $dbname -e "select ad.docid, substring(d.title,1,60), d.pmid, ad.auid, a.last, a.first, a.middle
+  from authdoc ad
+  left join authors a on ad.auid = a.auid 
+  left join docs d on ad.docid = d.docid 
+  where a.auid=$2;"
+  ;;
+
+auth1) mysql $dbname -e "select * from authors where last like '%${2}%';" ;;
+auth3) mysql $dbname -e "select * from authors where auid = $2;" ;;
+topauth) mysql $dbname -e "select ad.auid, a.last, a.first, a.middle, count(*) as 'document count' 
+  from authdoc ad
+  left join authors a on ad.auid = a.auid 
+  group by ad.auid, a.last, a.first, a.middle
+  order by count(*) desc limit 30 ;"
+  ;;
+
+
+blocks1) mysql $dbname -e "select * from blocks where docid=$2;" ;;
+text1) mysql $dbname -e "select * from text where docid=$2;" ;;
+text2) 
+  mysql $dbname -e "select count(*) as 'lines    ' from text where docid=$2 and type = 'lines ';"
+  mysql $dbname -e "select count(*) as 'sentences' from text where docid=$2 and type = 'sent';"
+  mysql $dbname -e "select count(*) as 'total    ' from text where docid=$2;"
+  ;;
+text3)  mysql $dbname -e "select * from text where docid=$2 and type = 'sent';" ;;
+text31) mysql $dbname -e "select * from text where docid=$2 and linenumber=$3 and type = 'sent';" ;;
+text4)  mysql $dbname -e "select * from text where docid=$2 and type = 'lines';" ;;
+text41) mysql $dbname -e "select * from text where docid=$2 and linenumber=$3 and type = 'lines';" ;;
+text5)  mysql $dbname -e "select * from text where docid=$2 and type = 'paragraph';" ;;
+text51) mysql $dbname -e "select * from text where docid=$2 and linenumber=$3 and type = 'paragraph';" ;;
+
+refs2) mysql $dbname -e "select docid, sentencenum, type, substring(ref1,1, 20) as 's-ref1', refid, substring(bibentry,1,60), 
+  refdocid, refpmid, refdoi from refs where docid=$2;" ;;
+refs4) mysql $dbname -e "select docid, sentencenum, type, substring(ref1,1, 20) as 's-ref1', refid, substring(bibentry,1,60), 
+  refdocid, refpmid, refdoi from refs where refdocid=$2;" ;;
+refs3) mysql $dbname -e "select docid, sentencenum, type, substring(ref1,1, 20) as 's-ref1', refid, substring(bibentry,1,60), 
+  refdocid, refpmid, refdoi from refs ;" ;;
+
+claim1) mysql $dbname -e "select * from claims where docid=$2;" ;;
+claim2) mysql $dbname -e "select * from claims where parentdocid=$2;" ;;
+
+toprefeddocs) mysql $dbname -e "select r.refdocid, d.pmid, d.doi, d.bibtype, substring(d.title,1,60), count(*) as 'parent of count referals'
+    from refs r
+    left join docs d on r.refdocid = d.docid 
+    group by r.refdocid, d.title order by count(*) desc limit 30 ;" 
+    echo "these are child documents that are being referenced by other documents"
+    ;;
+
+toprefsdocs) mysql $dbname -e "select r.docid, d.pmid, d.doi, d.bibtype, substring(d.title,1,60), count(*) as 'parent of count referals'
+    from refs r
+    left join docs d on r.docid = d.docid 
+    group by r.docid, d.title order by count(*) desc limit 30 ;" 
+    echo "these are parent documents that reference other documents"
+  ;;
+
+images1)    mysql $dbname -e "select * from images where docid=${2};"  ;;
+imagerefs1) mysql $dbname -e "select * from imagerefs where docid=${2};"  ;;
+
+# ----------
+"-schema") schema ;;
+index1) cypher-shell "call db.indexes();" ;;
+index) cypher-shell "call db.indexes();" | egrep ":aut|:cap|:doc|:img|:itxt|:ref|:rtxt" ;;
+
+index_add_drop) index_add_drop ;;
+
+topref) cypher-shell "
+  match (n:${DB}:aclaim)-[:supby]->(m) return m.cid, substring(m.ref,0,80) as reference, 
+    count(m.cid) as freq, collect(n.lineno) as text_linenumber order by freq desc limit 20;" ;;
+
+topclaim) cypher-shell "
+  match (n:${DB}:aclaim)-[:supby]->(m) return n.lineno, substring(n.text,0,80) as claim, 
+    count(n.lineno) as freq, collect(m.cid) as citation order by freq desc limit 20;" ;;
+
+d1) cypher-shell "match (n:${DB4}:doc) return count(n);" ;;
+d2) cypher-shell "match (n:${DB4}) return count(n);" ;;
+d3) cypher-shell "match (n:${DB4}:doc) return n;" ;;
+d4) cypher-shell "match (n:${DB4}:doc {docid:'$2'}) return n;" ;;
+d5) cypher-shell "match (n:${DB4}:rtxt {docid:'$2'}) return n;" ;;
+
+*)
+  echo "bad input" 
+  usage
+  ;; 
+esac
+
+echo
+echo "database $dbname"
+echo "for database listings - normally - only display top $top2 rows"
+echo
