@@ -36,6 +36,14 @@ all1:
 	./graph.r all
 
 #-----------------------------------------------------
+# this is for the Haggerty documents. Process:
+# 1. readdocx.r for the Haggerty document - make note of new "docid" for Haggerty document 
+# 2. do insert_filenames - add the new docid first
+# 3. do connectref.r - add the new docid first
+# 4. in the shiny files, add the new docid first
+#    shiny/dataarg1.r shiny/grapharg1.r
+
+#-----------------------------------------------------
 # a little program that inserts filenames into the docs table for massCATS type documents
 insert_filenames:
 	cd $(codeDir)

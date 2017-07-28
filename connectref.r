@@ -11,7 +11,7 @@ dataDir <- file.path(rootDir, "data")
 
 source(file.path(codeDir, "utils.r"))
 source(file.path(codeDir, "graph_utils.r"))
-source(file.path(codeDir, "tm_utils.r"))
+#source(file.path(codeDir, "tm_utils.r"))
 source(file.path(codeDir, "db.r"))
 
 library(dplyr)
@@ -20,7 +20,6 @@ library(tm)
 library(openNLP)
 
 logfilename <- "connectref.log"
-logdata("hello")
 
 
 #################################################################################### 
@@ -173,7 +172,7 @@ search_document_and_query <- function(docid, filename, query, return_results=5)
 }
 
 ######################################################################################
-search_all_documents <- function(docid=780)
+search_all_documents <- function(docid=2480)
 {
   dblist <- initialize_neo4j(dbname='arg2', delete_db=F)
   db <- dblist$db
@@ -214,7 +213,5 @@ search_all_documents <- function(docid=780)
 ######################################################################################
 # main Main MAIN
 # do_both_at_the_same_time()
-search_all_documents(docid=780)
-
-
+search_all_documents(docid=2480)
 

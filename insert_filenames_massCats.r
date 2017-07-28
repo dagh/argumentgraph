@@ -28,7 +28,7 @@ logfilename <- "insert_filenames_massCats.log"
 ####################################################################
 # haggerty docid
 # hag_docid=780
-insert_filenames <- function()
+insert_filenames <- function(hag_docid=2480)
 {
   file1 <- read.csv(file.path(dataDir, "massCATS_new_docs_jun14_2017.csv"), stringsAsFactors=F)
   db1 <- calldb(paste0("select docid, title, pmid, filename, doi from docs where docid >= ", hag_docid, " ;"))

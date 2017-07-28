@@ -564,7 +564,7 @@ fake_main <- function()
   db     <- dblist$db
   dbname <- dblist$dbname
   logdata("neo4j database name:", dbname)
-  docid=780
+  docid=2480
   # done of initialization
   
   list1 <- claim_data(db, dbname, docid, keep_refs=F)

@@ -17,7 +17,7 @@ dataos <- reactive({
     dbname <- dblist$dbname
 
     print("debug 1000")
-    docid <- 780
+    docid <- 2480
     print("debug 1100")
     list1 <- claim_data(db, dbname, docid, keep_refs=F) 
     print("debug 1200")

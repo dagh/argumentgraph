@@ -748,7 +748,7 @@ if(inputdf$process_type == 'docid') {
     logdata("Error: docid is not valid")
   }
 } else if(inputdf$process_type == 'file') {
-  loop_on_docs_for_g50(inputdf$pdfDocs, dbname='arg3', host='local', delete_db=T)
+  loop_on_docs_for_g50(inputdf$pdfDocs, dbname='arg3', host='aws', delete_db=T)
 }
 
 # the following passage splits the rows up in chunks of 100.  This is to 

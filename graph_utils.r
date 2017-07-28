@@ -696,7 +696,7 @@ initialize_neo4j <- function(dbname=NULL, host='local', delete_db=F)
     logdata("Using local host")
     db_url <- "http://localhost:7474/db/data"
     db <- startGraph(db_url)
-  } else if(host == 'AWS') {
+  } else if(tolower(host) == 'aws') {
     logdata("Using AWS host")
     db_url <- "http://mgh.kluriganalytics.com:7474/db/data"
     db <- startGraph(db_url, username='neo4j', password='hpr284')
