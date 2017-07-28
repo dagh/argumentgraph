@@ -20,9 +20,9 @@ calldb <- function(q1, set_utf8=FALSE)
       success <- TRUE
     }, error = function( e ) {
       if(grepl("Duplicate entry", conditionMessage(e))) {
-        log_data(paste0("calldb() - trying to insert duplicate entry - this is not a problem for us"))
+        logdata(paste0("calldb() - trying to insert duplicate entry - this is not a problem for us"))
       } else {
-        log_data(paste0("Error in calldb() - error message: \"", conditionMessage(e)))
+        logdata(paste0("Error in calldb() - error message: \"", conditionMessage(e)))
       }
       success <<- TRUE
     } )
@@ -54,9 +54,9 @@ calldbw <- function(d2, table=NA, append=T, set_utf8=FALSE)
       success <- TRUE
     }, error = function( e ) {
       if(grepl("Duplicate entry", conditionMessage(e))) {
-        log_data(paste0("calldb() - trying to insert duplicate entry - this is not a problem for us"))
+        logdata(paste0("calldb() - trying to insert duplicate entry - this is not a problem for us"))
       } else {
-        log_data(paste0("Error in calldb() - error message: \"", conditionMessage(e)))
+        logdata(paste0("Error in calldb() - error message: \"", conditionMessage(e)))
       }
       success <<- TRUE
     } )
@@ -70,17 +70,17 @@ calldbw <- function(d2, table=NA, append=T, set_utf8=FALSE)
 disconnect_all_mysql_connections <- function()
 {
   all_cons <- dbListConnections(MySQL())
-  log_data(paste("Before disconnect - number of connnections:", length(all_cons)))
+  logdata(paste("Before disconnect - number of connnections:", length(all_cons)))
   for(con in all_cons) dbDisconnect(con)
   all_cons <- dbListConnections(MySQL())
-  log_data(paste(" After disconnect - number of connnections:", length(all_cons)))
+  logdata(paste(" After disconnect - number of connnections:", length(all_cons)))
 } 
 
 #######################################################################
 delete_from_tables <- function()
 {
   for(t in c('text', 'blocks', 'authdoc', 'authors', 'docs')) {
-    log_data("delete data from table:", t)
+    logdata("delete data from table:", t)
     calldb(paste0("delete from ", t, ";"))
   }
 }
@@ -90,14 +90,14 @@ get_count_from_tables <- function()
 {
   for(t in c('docs', 'authors', 'authdoc', 'blocks', 'text', 'refs', 'images', 'imagerefs')) {
     countx <- calldb(paste0("select count(*) from ", t, ";")) %>% as.integer()
-    log_data(sprintf("table count for %8s is %3d rows", t, countx))
+    logdata(sprintf("table count for %8s is %3d rows", t, countx))
   }
 }
 
 #######################################################################
 insert_into_docs <- function(d1, insert=T)
 {
-  log_data(sprintf("insert_into_docs - rows: %s", nrow(d1)))
+  logdata(sprintf("insert_into_docs - rows: %s", nrow(d1)))
 
   if(is.null(d1$type)) d1$type <- 'standard'
 
@@ -131,7 +131,7 @@ insert_into_docs <- function(d1, insert=T)
 #######################################################################
 insert_into_authors <- function(d1, insert=T)
 {
-  log_data(sprintf("insert_into_authors - rows: %s", nrow(d1)))
+  logdata(sprintf("insert_into_authors - rows: %s", nrow(d1)))
 
   d2 <- lapply(d1, function(x) gsub("'", "''", x))  %>% as.data.frame(stringsAsFactors=F)
 
@@ -151,7 +151,7 @@ insert_into_authors <- function(d1, insert=T)
 #######################################################################
 insert_into_authdoc <- function(d1, insert=T)
 {
-  log_data(sprintf("insert_into_authdoc - rows: %s  insert: %s", nrow(d1), insert))
+  logdata(sprintf("insert_into_authdoc - rows: %s  insert: %s", nrow(d1), insert))
   table_fields <- "(docid, auid)"
 
   insert_replace <- ifelse(insert, 'insert', 'replace')
@@ -170,10 +170,10 @@ insert_into_authdoc <- function(d1, insert=T)
 insert_into_blocks <- function(docid, type, df, insert=T)
 {
   for(i in seq_len(nrow(df))) {
-    log_data(sprintf(
+    logdata(sprintf(
       "insert_into_blocks - docid: %d  type: %s  abstract: %d  intro: %d  method: %d", docid, type, df$abstract[i], df$intro[i], df$method[i])) 
   
-    log_data(sprintf(
+    logdata(sprintf(
       "                     result: %d  discussion: %d  conclusion: %d  acknowledgment: %d reference: %d  rows: %d",
       df$result[i], df$discussion[i], df$conclusion[i], df$acknowledgment[i], df$reference[i], nrow(df)))
   }
@@ -191,20 +191,26 @@ insert_into_blocks <- function(docid, type, df, insert=T)
 #######################################################################
 insert_into_refs <- function(docid, refs, insert=T)
 {
-  log_data(sprintf("insert_into_refs - docid: %d  insert: %s rows: %d", docid, insert, nrow(refs)))
+  logdata(sprintf("insert_into_refs - docid: %d  insert: %s rows: %d", docid, insert, nrow(refs)))
   
   if(nrow(refs) == 0) {
-    log_data("WARNING: zero rows in refs. Returning")
+    logdata("WARNING: zero rows in refs. Returning")
     return(NULL)
   }
 
   names(refs) <- c('docid', 'sentencenum', 'ref1', 'refid', 'type')
   
+  # remove duplicate docid:sentencenum:refid combo
+  refs1 <- refs %>% mutate(combo=paste(docid, sentencenum, refid, sep=":")) %>%
+                          distinct(combo, .keep_all=T) %>%
+                          select(-combo)
+  
   table_fields <- "(docid, sentencenum, ref1, refid, type)"
   insert_replace <- ifelse(insert, 'insert', 'replace')
-  refs <- lapply(refs, function(x) gsub("'", "''", x))  %>% as.data.frame(stringsAsFactors=F)
+  refs1 <- lapply(refs1, function(x) gsub("'", "''", x))  %>% as.data.frame(stringsAsFactors=F)
 
-  s1 <- paste(refs$docid, refs$sentencenum, refs$ref1, refs$refid, refs$type, sep="','")
+  s1 <- paste(refs1$docid, refs1$sentencenum, refs1$ref1, refs1$refid, refs1$type, sep="','")
+  s1 <- unique(s1)
   s2 <- paste0("('", s1, "')")
   s3 <- paste(s2, collapse=",")
   q1 <- paste0(insert_replace, " into refs ", table_fields, "  values ", s3, ";")
@@ -214,14 +220,14 @@ insert_into_refs <- function(docid, refs, insert=T)
 #######################################################################
 insert_into_images <- function(docid, df, insert=T)
 {
-  log_data(sprintf("insert_into_images - docid: %d  insert: %s rows: %d", docid, insert, nrow(df)))
+  logdata(sprintf("insert_into_images - docid: %d  insert: %s rows: %d", docid, insert, nrow(df)))
   
   if(nrow(df) == 0) {
-    log_data("WARNING: zero rows in images. Returning")
+    logdata("WARNING: zero rows in images. Returning")
     return(NULL)
   }
   if(any(duplicated(df$imagefile))) {
-    log_data("db.r: WARNING - image_meta$imagefile is not unique - will not be able to write to database - docid:", docid)
+    logdata("db.r: WARNING - image_meta$imagefile is not unique - will not be able to write to database - docid:", docid)
     return(NULL)
   }
 
@@ -240,10 +246,10 @@ insert_into_images <- function(docid, df, insert=T)
 #######################################################################
 update_images <- function(docid, df)
 {
-  log_data(sprintf("update_images - docid: %d rows: %d", docid, nrow(df)))
+  logdata(sprintf("update_images - docid: %d rows: %d", docid, nrow(df)))
   
   if(nrow(df) == 0) {
-    log_data("WARNING: update_images() - zero rows in images. Returning")
+    logdata("WARNING: update_images() - zero rows in images. Returning")
     return(NULL)
   }
 
@@ -261,10 +267,10 @@ update_images <- function(docid, df)
 #######################################################################
 insert_into_imagerefs <- function(docid, df, insert=T)
 {
-  log_data(sprintf("insert_into_imagerefs - docid: %d  insert: %s rows: %d", docid, insert, nrow(df)))
+  logdata(sprintf("insert_into_imagerefs - docid: %d  insert: %s rows: %d", docid, insert, nrow(df)))
   
   if(nrow(df) == 0) {
-    log_data("WARNING: zero rows in imagerefs. Returning")
+    logdata("WARNING: zero rows in imagerefs. Returning")
     return(NULL)
   }
 
@@ -286,7 +292,7 @@ insert_into_imagerefs <- function(docid, df, insert=T)
 #######################################################################
 insert_into_pubmed <- function(doc, path, df, insert=T)
 {
-  log_data(sprintf("insert_into_pubmed - doc: %s  insert: %s", doc, insert))
+  logdata(sprintf("insert_into_pubmed - doc: %s  insert: %s", doc, insert))
   table_fields <- "(pmid, doc, path, bibtype, title, year, month,
     journal, volume, number, pages, eprint, doi, language, issn, abstract)"
 
@@ -308,7 +314,7 @@ insert_into_pubmed <- function(doc, path, df, insert=T)
 #######################################################################
 insert_into_authorpb <- function(doc, pmid, df, insert=T)
 {
-  log_data(sprintf("insert_into_authorpb - doc: %s  pmid: %s  rows: %d  insert: %s", doc, pmid, nrow(df), insert))
+  logdata(sprintf("insert_into_authorpb - doc: %s  pmid: %s  rows: %d  insert: %s", doc, pmid, nrow(df), insert))
   table_fields <- "(pmid, doc, last, first, middle, role, email, comment)"
 
   insert_replace <- ifelse(insert, 'insert', 'replace')
@@ -325,7 +331,7 @@ insert_into_authorpb <- function(doc, pmid, df, insert=T)
 #######################################################################
 insert_into_bib <- function(doc, pmid, path, df, insert=T)
 {
-  log_data(sprintf("insert_into_bib - doc: %s  insert: %s", doc, insert))
+  logdata(sprintf("insert_into_bib - doc: %s  insert: %s", doc, insert))
 
   table_fields <- "(pmid, doc, bibtype, title, subtitle, date,
     volume, number, pages, url, doi, issn,
@@ -334,7 +340,7 @@ insert_into_bib <- function(doc, pmid, path, df, insert=T)
   if(!is.null(df$title)) {
     if(!is.na(df$title)) {
       if(nchar(df$title) > 510) {
-        log_data("Warning: title is", nchar(df$title), "characters - chopping")
+        logdata("Warning: title is", nchar(df$title), "characters - chopping")
         df$title <- substring(df$title, 1, 510)
       }
     }
@@ -343,7 +349,7 @@ insert_into_bib <- function(doc, pmid, path, df, insert=T)
   if(!is.null(df$subtitle)) {
     if(!is.na(df$subtitle)) {
       if(nchar(df$subtitle) > 510) {
-        log_data("Warning: subtitle is", nchar(df$subtitle), "characters - chopping")
+        logdata("Warning: subtitle is", nchar(df$subtitle), "characters - chopping")
         df$subtitle <- substring(df$subtitle, 1, 510)
       }
     }
@@ -367,7 +373,7 @@ insert_into_bib <- function(doc, pmid, path, df, insert=T)
 #######################################################################
 insert_into_authorbib <- function(doc, pmid, doi, df, insert=T)
 {
-  log_data(sprintf("insert_into_authorbib - doc: %s  pmid: %s  rows: %d  insert: %s", doc, pmid, nrow(df), insert))
+  logdata(sprintf("insert_into_authorbib - doc: %s  pmid: %s  rows: %d  insert: %s", doc, pmid, nrow(df), insert))
   table_fields <- "(doi, pmid, doc, last, first, middle, role, email, comment)"
 
   insert_replace <- ifelse(insert, 'insert', 'replace')
@@ -385,14 +391,14 @@ insert_into_authorbib <- function(doc, pmid, doi, df, insert=T)
 # insert_into_text(doc, 'lines', lines, insert=F)
 insert_into_text <- function(docid, type, text, insert=T)
 {
-  log_data(sprintf("insert_into_text - docid: %d, type: %s  insert: %s  rows: %d", docid, type, insert, nrow(text)))
+  logdata(sprintf("insert_into_text - docid: %d, type: %s  insert: %s  rows: %d", docid, type, insert, nrow(text)))
 	
 	# if this is not from readdocx, where type is paragraph, then change column header
 	if(type != 'paragraph')  names(text) <- 'text'
   
   # chop of text lines/sentences that are longer than 4096 characters. I think this can be done
   # safely, under the assumptions that no "real" sentences are longer that 4096 characters.
-  if(max(nchar(text$text)) > 4095) log_data("WARNING: sentence over 4095 characters")
+  if(max(nchar(text$text)) > 4095) logdata("WARNING: sentence over 4095 characters")
   text$text <- substring(text$text, 1, 4095)
   
   # if this is not from readdocx, where we already have the paragraph number, then add the line number
@@ -421,7 +427,7 @@ insert_into_text <- function(docid, type, text, insert=T)
 #######################################################################
 insert_into_claims <- function(d1, insert=T)
 {
-  log_data(sprintf("insert_into_claims - rows: %s", nrow(d1)))
+  logdata(sprintf("insert_into_claims - rows: %s", nrow(d1)))
   r <- calldbw(d1, table='claims')
 }
 

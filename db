@@ -3,9 +3,8 @@
 symptom_mult=3
 relationship_count=2
 
-#DB=arg2
 DB=arg3
-DB4=arg4
+DB_massCats=arg2
 dbname=mgh
 
 top1=30 # = limit
@@ -38,8 +37,7 @@ function usage
   echo "    ex: ./db findauth Ronald"
   echo "  findauthindoc <doc name>   : find all authors from a document"
   echo "    ex: ./db findauthindoc 2151"
-  echo "  deldoc <first few characters of doc>   : delete a doc from all tables in the database"
-  echo "    ex: ./db deldoc 2151"
+  echo "  deldoc <docid>   : delete a doc from all tables in the database"
   echo "  viewdoc <first few characters of doc>   : view a doc from all tables in the database"
   echo
   echo "  delbib : delete from tables: bib and authorbib"
@@ -55,7 +53,8 @@ function usage
   echo "  top_used_nodes"
   echo "  get_docs <docid>"
   echo "  get_nodes"
-  echo "  docsum <docid>"
+  echo "  docsum <docid>   : give a summary for a docid"
+  echo "  delrefs <docid>  : delete references for docid"
 }
 
 #################################################################################################
@@ -81,18 +80,35 @@ function schema_keys
 #################################################################################################
 function summary
 {
-
+  # -------------- standard neo4j graph
+  echo
+  echo "========== Standard Argument Graph ===="
+  echo
   echo "Count total for argument graph: ${DB}"
   cypher-shell "match (n:${DB}) with count(n) as node_count
     match (n:${DB})-[r]->(m) return node_count, count(r) as edge_count ;"
 
-  echo "node count by node type"
   cypher-shell "match (n:${DB})
     return distinct(labels(n)), count(*) as count order by count desc;"
 
-  echo "edge count by edge between node types"
   cypher-shell "match (n:${DB})-[r]->(n1:${DB}) 
-    return distinct labels(n) as from, type(r) as edge, labels(n1) as to, count(*) as count 
+    return distinct labels(n) as from_node, type(r) as edge, labels(n1) as to_node, count(*) as count 
+    order by edge, count desc;"
+
+  # -------------- massCats neo4j graph
+  echo
+  echo "============== MassCATS Graph ========="
+  echo
+
+  echo "Count total for massCats graph: ${DB_massCats}"
+  cypher-shell "match (n:${DB_massCats}) with count(n) as node_count
+    match (n:${DB_massCats})-[r]->(m) return node_count, count(r) as edge_count ;"
+
+  cypher-shell "match (n:${DB_massCats})
+    return distinct(labels(n)), count(*) as count order by count desc;"
+
+  cypher-shell "match (n:${DB_massCats})-[r]->(n1:${DB_massCats}) 
+    return distinct labels(n) as from_node, type(r) as edge, labels(n1) as to_node, count(*) as count 
     order by edge, count desc;"
 }
 
@@ -157,10 +173,15 @@ function document_summary
     union
     select 'lines', count(*) from text where docid=$docid and type='lines'
     union
-    select 'refids (reference IDs that point to bibentries that are located in the reference list)', count(*) from refs where docid=$docid 
+    select 'refids', count(*) from refs where docid=$docid 
     union
-    select 'bibentry\'s found (this number should be as close as possible to refids)', 
-      count(*) from refs where docid=$docid and not bibentry is NULL ;"
+    select 'bibentry\'s found (higher number is better)', 
+      count(*) from refs where docid=$docid and not bibentry is NULL and bibentry <> 'NA'
+    union
+    select 'images', count(*) from images where docid=$docid 
+    union
+    select 'imagerefs', count(*) from imagerefs where docid=$docid 
+    ;"
 
   mysql $dbname -e "select type as 'reference type' from refs where docid=$docid limit 1 ;" 
 
@@ -288,6 +309,19 @@ schema_keys) schema_keys;;
 summary1) summary1;;
 summary) summary;;
 docsum) document_summary $2 ;;
+delrefs) mysql $dbname -e "delete from refs where docid=${2};" ;;
+
+deldoc)
+  mysql $dbname -e "delete from claims where docid=${2} ;"
+  mysql $dbname -e "delete from imagerefs where docid=${2} ;"
+  mysql $dbname -e "delete from images where docid=${2} ;"
+  mysql $dbname -e "delete from refs where docid=${2} ;"
+  mysql $dbname -e "delete from blocks where docid=${2} ;"
+  mysql $dbname -e "delete from text where docid=${2} ;"
+  mysql $dbname -e "delete from authdoc where docid=${2} ;"
+  mysql $dbname -e "delete from docs where docid=${2} ;"
+  ;;
+
 top_used_nodes) top_used_nodes ;;
 get_docs) get_docs $2;;
 get_nodes) get_nodes ;;
@@ -339,6 +373,24 @@ refs4) mysql $dbname -e "select docid, sentencenum, type, substring(ref1,1, 20) 
   refdocid, refpmid, refdoi from refs where refdocid=$2;" ;;
 refs3) mysql $dbname -e "select docid, sentencenum, type, substring(ref1,1, 20) as 's-ref1', refid, substring(bibentry,1,60), 
   refdocid, refpmid, refdoi from refs ;" ;;
+
+refs5)
+  batch=''
+  if [ "$2" = "csv" ]
+  then
+    batch=-B
+  fi
+  mysql $dbname $batch -e "
+    select d.docid, d.filename, substring(d.journal, 1, 30), r.docid, r.type,
+    count(r.docid) totalcount,
+    sum(case when (r.bibentry is NULL or r.bibentry = 'NA') then 1 else 0 end) bibentry_is_null
+    from docs d
+    left join refs r on d.docid = r.docid
+    #where d.docid <= 50
+    where d.filename <> ''
+    group by d.docid, r.type
+    order by r.type, d.docid ;"
+    ;;
 
 claim1) mysql $dbname -e "select * from claims where docid=$2;" ;;
 claim2) mysql $dbname -e "select * from claims where parentdocid=$2;" ;;

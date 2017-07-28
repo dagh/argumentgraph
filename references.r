@@ -11,29 +11,28 @@ dataDir   <- file.path(rootDir, "data")
 outputDir <- file.path(rootDir, "output")
 claimDir  <- file.path(rootDir, "find_claim")
 
-
 source(file.path(codeDir, "utils.r"))
-source(file.path(codeDir, "tm_utils.r"))
 source(file.path(codeDir, "db.r"))
 source(file.path(codeDir, "pbutils.r"))
 
-library(dplyr)
-#library(RNeo4j)
-library(stringr)
-library(tm)
-library(openNLP)
-#library(RWeka)
-#library(SnowballC)
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(stringr)
+  library(tm)
+  library(openNLP)
+})
 
 # need to call this such that we can access correct database
 SQL_DATABASE_NAME <- 'mgh'
 
 logfilename <- "references.log"
 
-library(RefManageR)
-library(rorcid)
-library(rcrossref)
-library(stringdist)
+suppressPackageStartupMessages({
+  library(RefManageR)
+  library(rorcid)
+  library(rcrossref)
+  library(stringdist)
+})
 
 #####################################################################################
 test_function1 <- function()
@@ -305,7 +304,13 @@ determine_reference_type <- function(docid)
   inverse_pattern <- "\\([0-9]{4}\\)"
   index <- grep(pattern, s1$text)
   count_parans <- grep(inverse_pattern, s1$text[index], invert=T) %>% length() # remove all years, eg (2007) or (1989)
-  a1 <- str_extract_all(s1$text, pattern)
+  
+  # substitute out some non parans, such as F(2,114) and t(2,58)
+  s2 <- s1
+  term_mask <- c("f\\(2,114\\)", "t\\(2,58\\)", "f\\(1,102\\)", "f\\(2,111\\)", "t\\(2,51\\)", "t\\(2,54\\)")
+  for(tmask in term_mask) s2$text <- gsub(tmask, "==", tolower(s2$text))
+  
+  a1 <- str_extract_all(s2$text, pattern)
   # remove lines longer that X references per line
   for(i in seq_len(length(a1))) { if(length(a1[[i]]) > max_references_per_line)  a1[[i]] <- character() }
   dparans <- get_references_dataframe(docid, a1)
@@ -328,7 +333,9 @@ determine_reference_type <- function(docid)
   dname_year <- get_references_dataframe(docid, a1, name_year=T)
   # remove some exceptions
   dname_year <- dname_year %>% filter(!grepl('IIRG', refid)) %>%
-                               filter(!grepl('rTg4510', refid))
+                               filter(!grepl('rTg4510', refid)) %>%
+                               filter(!grepl('accession number', refid, ignore.case=T)) %>%
+                               filter(!grepl('accession number', ref1, ignore.case=T))
   
   if(0) {
     #s2.save <- s2
@@ -358,7 +365,8 @@ determine_reference_type <- function(docid)
                  "[ e-]ab[0-9]", "amyloid4", "c99", "c6\\]", "t1/2", "[ ,-]ag[0-9]", "ly411", "hj5\\.", "[ 0]ns0[0-9]", 
                  "/[ ]*ps1", "thk523", "rtg4510", "a4", "kd1", "bmax1", "kd2", "bmax2", "k1828", "k18", "htou40",
                  "alz5", "phf1", "ca1[ ,\\.]", "p301l", "ht7", "5a6", "at180", "s[1-9][a-z),;.]", " ca3", " cp13", "cy3-", " da9",
-                 "iba1",
+                 "iba1", "c9orf[0-9]",
+                 "ab37", "ab38", "ab39", "ab40", "ab41", "ab42", "sgsm41", 
                  "aqp4", "d200", "[-]d[0-9]", "\\[[0-9]", "ng2-", "7ra1", "tie2-", "a594", "-d7", "b14",
                  "e693d", "ad8k", "[1,2,3]e2", "v717l", " nu1", "gse[0-9]", "satb2", "tbr1",
                  "cd33", "rs38", "bv2", "trem2", "[0-9 -][abc]0", "k7r", "de9 ", "aa0", "abca7", "cd2ap", "epha1", "ms4", "[0-9 ]e5",
@@ -379,9 +387,9 @@ determine_reference_type <- function(docid)
   if(nrow(dsup) > 0) dsup$type <- 'sup'
   
   #----- 5. log the data
-  log_data(sprintf("row-count: %3d  square: %3d  paran: %3d  name_year: %3d  sup: %3d", 
+  logdata(sprintf("row-count: %3d  square: %3d  paran: %3d  name_year: %3d  sup: %3d", 
     docid, nrow(dsquare), nrow(dparans), nrow(dname_year), nrow(dsup)))
-  log_data(sprintf(" my-count: %3s  square: %3d  paran: %3d  name_year: %3d  sup: %3d", 
+  logdata(sprintf(" my-count: %3s  square: %3d  paran: %3d  name_year: %3d  sup: %3d", 
     "", count_square, count_parans, count_name_year, count_sup))
   
   s3 <- c(nrow(dsquare), nrow(dparans), nrow(dname_year), nrow(dsup))
@@ -389,11 +397,11 @@ determine_reference_type <- function(docid)
   namex <- names(s3)[which(s3 == max(s3))]
   
   if(length(namex) > 1) {
-    log_data("WARNING - select more than one reference type:\"", paste(namex, collapse=", "), "\" - picking the first one")
+    logdata("WARNING - select more than one reference type:\"", paste(namex, collapse=", "), "\" - picking the first one")
     namex <- namex[1]
   }
   
-  log_data("selected reference type:", namex)
+  logdata("selected reference type:", namex)
   if(length(namex) == 1) {
     if(namex == 'dsquare') {
       insert_into_refs(docid, dsquare, insert=T)
@@ -404,10 +412,10 @@ determine_reference_type <- function(docid)
     } else  if(namex == 'dsup') {
       insert_into_refs(docid, dsup, insert=T)
     } else {
-      log_data("Error - namex not found")
+      logdata("Error - namex not found")
     } 
   } else { 
-    log_data("Error - more than one reference types found:", namex)
+    logdata("Error - more than one reference types found:", namex)
   }
 
   d2 <- data.frame(docid=docid, dsquare=nrow(dsquare), dparans=nrow(dparans), 
@@ -423,13 +431,13 @@ find_references <- function(pdfDocs)
 {
   disconnect_all_mysql_connections()
   
-  log_data("count from current database")
+  logdata("count from current database")
 
   if(!is.null(pdfDocs)) {
     # pdfDocs is not NULL, then make sure that the file exists in the database before we proceed
     x1 <- calldb(paste0("select filename from docs where filename = '", pdfDocs, "';"))
     if(nrow(x1) == 0) {
-      log_data("Error: file ", pdfDocs, "does not exists in the database - exiting")
+      logdata("Error: file ", pdfDocs, "does not exists in the database - exiting")
       return(NULL)
     }
   }
@@ -442,17 +450,17 @@ find_references <- function(pdfDocs)
     docinfo <- calldb(paste0("select docid, pmid, journal from docs where filename = '", doc, "' ;"))
 
     if(nrow(docinfo) == 0) {
-      log_data("WARNING - did not find a document in the database for docname:", doc)
+      logdata("WARNING - did not find a document in the database for docname:", doc)
       next ;
     }
-    log_data("-------------------------------------------------------------------------")
-    log_data(i, " docid:", docinfo$docid, " document in process: ", doc)
+    logdata("-------------------------------------------------------------------------")
+    logdata(i, " docid:", docinfo$docid, " document in process: ", doc)
 
     d3 <- rbind(d3, determine_reference_type(docinfo$docid))
   }
   write.csv(d3, file=file.path(codeDir, "d3_8.csv"), row.names=F)
 
-  log_data("count from current database")
+  logdata("count from current database")
 }
 
 #####################################################################################
@@ -475,7 +483,7 @@ store_references_in_db <- function(docid, refid, s3)
 }
 
 #####################################################################################
-parse_nameyear <- function(docid, d1, start_of_reference)
+parse_nameyear <- function(docid, d1=NULL, start_of_reference=NULL)
 {
   # Step A. From the reference list in the document, parse out each bibentry
   
@@ -492,7 +500,8 @@ parse_nameyear <- function(docid, d1, start_of_reference)
   # do lines as a test
   if(length(start_of_reference)) d1 <- d1[c((start_of_reference+1):nrow(d1)),]
   
-  head(d1)
+  #write_csv(d1[1:13,], path=file.path(codeDir, "d1.csv"))
+  
   d2 <- data.frame()
   j <- 1
   s1 <- character()
@@ -511,58 +520,44 @@ parse_nameyear <- function(docid, d1, start_of_reference)
   }
   d2$text <- trim(d2$text)
   
+  # remove such that we don't think are real references
+  d2 %>% filter(grepl('cell', text, ignore.case=T))
+  d2 %>% filter(grepl('Elsevier', text, ignore.case=T))
+  d2 %>% filter(grepl('accession number', text, ignore.case=T))
+  
   # d2 now contains the reference list with each bibentry on it's own line
   
   # Step B. Get the bib entries and match those to the references in d2
-  d1 <- calldb(paste0("select docid, refid from refs where docid = ", docid, " ;"))
-  head(d1)
+  d3 <- calldb(paste0("select docid, refid from refs where docid = ", docid, " ;"))
+  head(d3)
   head(d2)
   # get first name from both data frames
-  d1$first <- sapply(strsplit(d1$refid, "[ ,]"), '[[', 1)
-  #d1$year  <- str_extract_all(d1$refid, "[0-9]{4}") %>% unlist()
-  d1 <- d1 %>% mutate(y1 = str_extract_all(refid, "[0-9]{4}")) %>% 
+  d3$first <- sapply(strsplit(d3$refid, "[ ,]"), '[[', 1)
+  #d3$year  <- str_extract_all(d3$refid, "[0-9]{4}") %>% unlist()
+  d3 <- d3 %>% mutate(y1 = str_extract_all(refid, "[0-9]{4}")) %>% 
     mutate(y2=paste(y1)) %>%
     separate_rows(y2, sep="[ ,]") %>%
     filter(y2 != '') %>%
     mutate(year = gsub("[^0-9]", "", y2)) %>% 
     select(-y2)
-  d1$combo <- paste(d1$first, d1$year, sep=":")
+  d3$combo <- paste(d3$first, d3$year, sep=":")
   
   d2$first <- sapply(strsplit(d2$text, "[ ,]"), '[[', 1)
-  d2$year  <- str_extract_all(d2$text, "[0-9]{4}") %>% gsub("(\\(|\\))", "", .)
-  d2$combo <- paste(d2$first, d2$year, sep=":")
-  
-  if(0) {
-    #d2.save <- d2
-    d2 <- d2.save
-    d2 <- d2.save[2:4,]
-    d2$first <- sapply(strsplit(d2$text, "[ ,]"), '[[', 1)
     
-    #convert to integer vector
-    d2 <- d2 %>% mutate(y1 = str_extract_all(text, "[0-9]{4}")) %>%
-      mutate(y2 = map_chr(y1, function(x) {paste(x, collapse=":")})) %>%
-      separate_rows(y2, sep=":") %>%
-      mutate(y2 = as.integer(y2)) %>%
-      filter(between(y2, 1980, 2022))
-    
-    
-    
-  }
-  d3 <- full_join(d1, d2, by="combo")
+  #convert to integer vector
+  d2 <- d2 %>% mutate(y1 = str_extract_all(text, "[0-9]{4}")) %>%
+    mutate(year = map_chr(y1, function(x) {paste(x, collapse=":")})) %>%
+    separate_rows(year, sep=":") %>%
+    mutate(year = as.integer(year)) %>%
+    filter(between(year, 1970, 2022)) %>%
+    mutate(combo = paste(first, year, sep=":"))
 
-  return(list(refid=d3$refid, s3=d3$text))
-  
+  # combine d3 and d2
+  d4 <- full_join(d3, d2, by="combo")
+
+  return(list(refid=d4$refid, s3=d4$text))
 }
 
-#####################################################################################
-parse_nameyear_old <- function(d1, start_of_reference)
-{
-  d2 <- d1[(start_of_reference+1):nrow(d1),]
-  a1 <- d2$text
-  index <- grep("this is a sentence", tolower(a1))
-  if(length(index) > 0) a1 <- a1[-index]
-  a1
-}
 
 
 #####################################################################################
@@ -573,10 +568,12 @@ parse_nameyear_old <- function(d1, start_of_reference)
 #   docname <- "21532579_Bero_Neuronal_activity_regulates.pdf"
 # docid=13
 
-parse_references <- function(docid)
+parse_references <- function(docid, use_start_of_reference=T)
 {
-  d1 <- calldb(paste0("select * from text where docid = ", docid, " and type = 'sent' order by linenumber ; "))
-  start_of_reference <- calldb(paste0("select reference from blocks where docid = ", docid, " and type = 'sent' ; ")) %>% as.integer()
+  xtype <- 'lines'
+  
+  d1 <- calldb(paste0("select * from text where docid = ", docid, " and type = '", xtype, "' order by linenumber ; "))
+  start_of_reference <- calldb(paste0("select reference from blocks where docid = ", docid, " and type = '", xtype, "' ; ")) %>% as.integer()
   reftype <- calldb(paste0("select type from refs where docid = ", docid, " limit 1 ; ")) %>% as.character()
   
   if(reftype == 'nameyear') {
@@ -585,24 +582,52 @@ parse_references <- function(docid)
     return(d8)
   }
   
-  d2 <- d1[(start_of_reference+1):nrow(d1),]
+  if(use_start_of_reference) {
+    d2 <- d1[(start_of_reference+1):nrow(d1),]
+  } else {
+    d2 <- d1
+  }
+    
+  #d2 <- d1[(start_of_reference+1):nrow(d1),]
+  
   a1 <- d2$text
   # remove "this is a sentence" if it exists
   index <- grep("this is a sentence", tolower(a1))
   if(length(index) > 0) a1 <- a1[-index]
   
   if(reftype == 'square') {
-    # if there are more than 20% of square brackets, then this is square bracket type of reference list
-    # so, if there is a square brackets that is not the first character on a new line, then make 
-    # it the first character
     # This is a bit screwy. First we paste all references into one long string (a2)
     # then we split on the open square brackets
     # then add a new first square brackets (the first one is gone during the string split)
     # Then if there is only a square bracket in a string (length == 1), then remove that entry
     # Then trim and set back to a1 again
+    
+    # if the first digit does not have a square bracket, then we add one here
+    a1 <- gsub("(^[0-9]{1,3}.)", '[\\1', a1, perl=T)
+    
     a2 <- paste(a1, collapse=" ")
     a3 <- strsplit(a2, '\\[') %>% unlist()
     a4 <- paste0('[', a3)
+    index <- which(nchar(a4) == 1)
+    if(length(index) > 0) a4 <- a4[-index]
+    a4 <- sapply(a4, trim) %>% as.character()
+    a1 <- a4
+  } else if (reftype == 'sup' | reftype == 'paran') {
+    
+    # test to see if numbers are using a "." or a space after in the index of each reference
+    # the index with most entries will decide if we're using space or dots.
+    index_space <- grep("(^[0-9]{1,3}) ", a1)
+    index_dot   <- grep("(^[0-9]{1,3}\\.)", a1)
+    search_pattern <- if_else(length(index_space) > length(index_dot), "(^[0-9]{1,3} )", "(^[0-9]{1,3}\\.)")
+    
+    #a1 <- d2$text
+    #a1 <- gsub("(^[0-9]{1,3}\\.)", '::::\\1', a1, perl=T)
+    a1 <- gsub(search_pattern, '::::\\1', a1, perl=T)
+    a1 <- a1[!(a1 %in% c('NIH-PA', 'Author', 'Manuscript'))]
+    
+    a2 <- paste(a1, collapse=" ")
+    a3 <- strsplit(a2, '::::') %>% unlist()
+    a4 <- sapply(a3, trim) %>% as.character()
     index <- which(nchar(a4) == 1)
     if(length(index) > 0) a4 <- a4[-index]
     a4 <- sapply(a4, trim) %>% as.character()
@@ -659,18 +684,39 @@ parse_references <- function(docid)
   }
   
   # ------------
+  # 1. remove all entries such as: <number>.<number>
+  index <- grep("^[0-9]+\\.[0-9]", s2)
+  if(length(index) > 0) s2 <- s2[-index]
   
   refid <- str_extract_all(s2, "^([0-9]+|\\[[0-9]+)")  %>% unlist()
   refid <- sapply(refid, function(x) gsub("\\[|\\]|\\.", "", x)) %>% as.integer()
-  class(refid)
-
-  s3 <- gsub("^([0-9]+|\\[[0-9.]+\\])[ .]*", "", s2)
+    
+  # remove the square bracket and number and dot
+  s3 <- gsub("^([0-9]{1,3}|\\[[0-9.]{1,3}|\\[[0-9]{1,3}\\.+\\])[ .]*", "", s2)
+  #s3 <- gsub("^([0-9]+|\\[[0-9.]+\\])[ .]*", "", s2)
   s3 <- gsub("- ", "", s3)
+    
+  # even though we have sub'ed away all 'first staring numbers', if there 
+  #   are still more, remove those entries, and do same with refids
+  index <- grep("^[0-9]", s3)
+  if(length(index) > 0) {
+    s3    <- s3[-index]
+    refid <- refid[-index]
+  }
   
+  # return refid and s3 are not of equal lengths, or if s3 is less than 10.
+  # There is normally more than 5 references in a document and less than that
+  # should indicate an error
+  if((length(refid) != length(s3)) | length(s3) < 5) {
+    logdata("WARNING: length of refid and s3 are not the same, or less than some number of references - returning NULL")
+    return(NULL)
+  }
+    
   d8 <- store_references_in_db(docid, refid, s3)
   
   return(d8)
 }
+
 
 ######################################################################################
 if(0) { path='tmp'; pmid=3; s5 = s3[i] }
@@ -680,7 +726,7 @@ parse_reference_list <- function(pdfDocs)
     # pdfDocs is not NULL, then make sure that the file exists in the database before we proceed
     x1 <- calldb(paste0("select filename from docs where filename = '", pdfDocs, "';"))
     if(nrow(x1) == 0) {
-      log_data("Error: file ", pdfDocs, "does not exists in the database - exiting")
+      logdata("Error: file ", pdfDocs, "does not exists in the database - exiting")
       return(NULL)
     }
   }
@@ -693,13 +739,18 @@ parse_reference_list <- function(pdfDocs)
     docinfo <- calldb(paste0("select docid, pmid, journal from docs where filename = '", doc, "' ;"))
 
     if(nrow(docinfo) == 0) {
-      log_data("WARNING - did not find a document in the database for docname:", doc)
+      logdata("WARNING - did not find a document in the database for docname:", doc)
       next ;
     }
-    log_data("-------------------------------------------------------------------------")
-    log_data(i, " docid:", docinfo$docid, " document in process: ", doc)
+    logdata("-------------------------------------------------------------------------")
+    logdata(i, " docid:", docinfo$docid, " document in process: ", doc)
 
-    d3 <- rbind(d3, parse_references(docinfo$docid))
+    # try first by using the only entries in the start of reference...
+    dtmp <- parse_references(docinfo$docid, use_start_of_reference=T)
+    # ...if that did not work, then use the whole document
+    if(is.null(dtmp))  dtmp <- parse_references(docinfo$docid, use_start_of_reference=F)
+    
+    d3 <- rbind(d3, dtmp)
   }
   write.csv(d3, file=file.path(codeDir, "reflist3.csv"), row.names=F)
   unique(d3$docname) 
@@ -727,11 +778,11 @@ find_store_in_bib <- function(docid, sentencenum, refid, s5)
   
   bib <- my.ReadCrossRef(s5)
   if(is.null(bib)) {
-    log_data(sprintf("No results found in CrossRef for \"%s\" (string length nchar: %d)", s5, nchar(s5)))
+    logdata(sprintf("No results found in CrossRef for \"%s\" (string length nchar: %d)", s5, nchar(s5)))
     return(NULL)
   }
   if(length(bib$author) == 0) {
-    log_data("Author length is zero, therefore assume this bib is no good, so return")
+    logdata("Author length is zero, therefore assume this bib is no good, so return")
     return(NULL)
   }
   
@@ -757,9 +808,9 @@ find_store_in_bib <- function(docid, sentencenum, refid, s5)
   (d7 <- calldb(paste0("select docid, pmid, doi from docs where doi = '", bib1$doi, "' ;")))
   
   if(nrow(d7) == 0) {
-    log_data("something really weird because d7 should never be zero rows")
-    log_data("     Perhaps there was an error cought in find_store_in_pubmed_pmid()")
-    log_data("     bib1$doi:", bib1$doi)
+    logdata("something really weird because d7 should never be zero rows")
+    logdata("     Perhaps there was an error cought in find_store_in_pubmed_pmid()")
+    logdata("     bib1$doi:", bib1$doi)
     return(NULL)
   }
   
@@ -795,8 +846,8 @@ find_bibentry <- function(pdfDocs)
   
   d3 <- data.frame()
   for(i in seq_len(nrow(p1))) {
-    #log_data("-------------------------------------------------------------------------")
-    log_data(i, "of", nrow(p1), "- docid:", p1$docid[i], " sentencenum: ", p1$sentencenum[i], 
+    #logdata("-------------------------------------------------------------------------")
+    logdata(i, "of", nrow(p1), "- docid:", p1$docid[i], " sentencenum: ", p1$sentencenum[i], 
       " bibentry:", substring(p1$bibentry[i], 1, 40), " refpmid:", p1$refpmid[i])
     if(!is.na(p1$refpmid[i])) next ;
     find_store_in_bib(p1$docid[i], p1$sentencenum[i], p1$refid[i], p1$bibentry[i])
@@ -806,14 +857,13 @@ find_bibentry <- function(pdfDocs)
 #####################################################################################
 usage <- function()
 {
-  log_data("Error: error in parameters ")
-  log_data("Usage: ./references.r all <filename>                  :filename is optional")
-  log_data("Usage: ./references.r find_references <filename>      :filename is optional")
-  log_data("Usage: ./references.r parse_reference_list <filename> :filename is optional")
-  log_data("Usage: ./references.r find_bibentry <filename>        :filename is optional")
-  log_data("")
-  log_data("Example: ./references.r all /home_ssd/dag/0-Annat/0-R/customers/mgh/data/top50alz/20042704_Petersen_ADNI_Clinical_characterization.pdf")
-  log_data("")
+  logdata("Error: error in parameters ")
+  logdata("Usage: ./references.r all <filename>                  :filename is optional")
+  logdata("Usage: ./references.r find_references <filename>      :filename is optional")
+  logdata("Usage: ./references.r parse_reference_list <filename> :filename is optional")
+  logdata("Usage: ./references.r find_bibentry <filename>        :filename is optional")
+  logdata("Example: ./references.r all /home_ssd/dag/0-Annat/0-R/customers/mgh/data/top50alz/20042704_Petersen_ADNI_Clinical_characterization.pdf")
+  logdata("")
 }
 
 #####################################################################################
@@ -829,15 +879,15 @@ usage <- function()
 #./references.r donald_duck bad-file-name
 #
 
-log_data("==================== START OF RUN =================")
+logdata("==================== START OF RUN =================")
 t1 <- proc.time()
-get_count_from_tables()
+#get_count_from_tables()
 
 option_list <- c('all', 'find_references', 'parse_reference_list', 'find_bibentry')
 
 pdfDir <- pdfDocs <- filenamex <- option1 <- NULL
 
-log_data("command line options - count:", length(commandArgs()))
+logdata("command line options - count:", length(commandArgs()))
 #print(commandArgs())
 
 # note that when there are no arguments, the length is 4
@@ -861,8 +911,8 @@ if( length( commandArgs() ) == 4 ) {
   } else {
     filenamex <- commandArgs()[7]
     if(!file.exists(filenamex))  {
-      log_data("Error: file", filenamex, "does not exists - exiting")
-      log_data("NOTE - we need absolute addresses to files")
+      logdata("Error: file", filenamex, "does not exists - exiting")
+      logdata("NOTE - we need absolute addresses to files")
       usage()
       run_process <- FALSE
     } else {
@@ -873,35 +923,34 @@ if( length( commandArgs() ) == 4 ) {
 }
 
 if(!run_process) option1 <- "bad parameters"
-
-log_data("option1: ", option1)
+#logdata("option1: ", option1)
 
 if(option1 == 'find_references') {
-  log_data("1. find references in all documents, and store the first cut in the refs database table")
+  logdata("1. find references in all documents, and store the first cut in the refs database table")
   find_references(pdfDocs)
 
 } else if(option1 == 'parse_reference_list') {
-  log_data("2. parse out the bib entries and store in database")
+  logdata("2. parse out the bib entries and store in database")
   parse_reference_list(pdfDocs)
 
 } else if(option1 == 'find_bibentry') {
-  log_data("3. find and distribute bibliographic entries")
+  logdata("3. find and distribute bibliographic entries")
   find_bibentry(pdfDocs)
 
 } else if(option1 == 'all') {
    
-  log_data("4. do all options")
+  logdata("4. do all options")
   find_references(pdfDocs)
   parse_reference_list(pdfDocs)
   find_bibentry(pdfDocs)
 } 
 
-get_count_from_tables()
+#get_count_from_tables()
 s <- proc.time()[3] - t1[3]
 s <- as.integer(s)
 h <- s %/% 3600 ; s <- s - (h*3600) ; 
 m <- s %/% 60   ; s <- s - (m*60)   ; 
-log_data("")
-log_data(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
-log_data("==================== END OF RUN =================")
+logdata("")
+logdata(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
+logdata("==================== END OF RUN =================")
 

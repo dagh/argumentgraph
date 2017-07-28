@@ -11,19 +11,19 @@ dataDir   <- file.path(rootDir, "data")
 outputDir <- file.path(rootDir, "output")
 claimDir  <- file.path(rootDir, "find_claim")
 
-
 source(file.path(codeDir, "utils.r"))
-source(file.path(codeDir, "tm_utils.r"))
 source(file.path(codeDir, "db.r"))
 source(file.path(codeDir, "pbutils.r"))
 
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(stringr))
-suppressPackageStartupMessages(library(tm))
-suppressPackageStartupMessages(library(openNLP))
-suppressPackageStartupMessages(library(RefManageR))
-suppressPackageStartupMessages(library(rorcid))
-suppressPackageStartupMessages(library(rcrossref))
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(stringr)
+  library(tm)
+  library(openNLP)
+  library(RefManageR)
+  library(rorcid)
+  library(rcrossref)
+})
 
 # need to call this such that we can access correct database
 SQL_DATABASE_NAME <- 'mgh'
@@ -59,7 +59,7 @@ find_store_in_pubmed <- function(pdfDocs, pdfDir)
   i <- 0
   for(docname in pdfDocs) {
     i <- i + 1
-    log_data(sprintf("%3d of %2d  %s", i, length(pdfDocs), docname))
+    logdata(sprintf("%3d of %2d  %s", i, length(pdfDocs), docname))
     pmid <- substring(docname, 1, 8) %>% as.integer()
     b1 <- GetPubMedByID(pmid)
     if(is.null(b1)) next ;
@@ -116,7 +116,7 @@ find_store_in_pubmed <- function(pdfDocs, pdfDir)
 # MAIN main Main
 #
 
-log_data("==================== START OF RUN =================")
+logdata("==================== START OF RUN =================")
 t1 <- proc.time()
 
 
@@ -124,22 +124,22 @@ process_file <- FALSE
 if( length( commandArgs() ) == 6 ) {
   filenamex <- commandArgs()[6]
   if(tolower(filenamex) == 'all') {
-    log_data("Do all files")
+    logdata("Do all files")
     pdfDocs <- pdfDir <- NULL
     process_file <- TRUE
   } else if(file.exists(filenamex))  {
-    log_data("Process file:", filenamex)
+    logdata("Process file:", filenamex)
     if(0){filenamex <- "/home_ssd/dag/0-Annat/0-R/customers/mgh/data/top50alz/20042704_Petersen_ADNI_Clinical_characterization.pdf"}
     pdfDocs <- basename(filenamex)
     pdfDir <- dirname(filenamex)
     process_file <- TRUE
   } else if(!file.exists(filenamex))  {
-    log_data("Error: file", filenamex, "does not exists - exiting")
-    log_data("NOTE - we need absolute addresses to files")
+    logdata("Error: file", filenamex, "does not exists - exiting")
+    logdata("NOTE - we need absolute addresses to files")
     process_file <- FALSE
   }
 } else {
-  log_data("Input must be either 'all' for all files or a filename with an absolute file path") 
+  logdata("Input must be either 'all' for all files or a filename with an absolute file path") 
   process_file <- FALSE
 }
 
@@ -149,7 +149,7 @@ s <- proc.time()[3] - t1[3]
 s <- as.integer(s)
 h <- s %/% 3600 ; s <- s - (h*3600) ; 
 m <- s %/% 60   ; s <- s - (m*60)   ; 
-log_data("")
-log_data(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
-log_data("==================== END OF RUN =================")
+logdata("")
+logdata(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
+logdata("==================== END OF RUN =================")
 

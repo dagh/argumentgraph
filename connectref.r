@@ -20,7 +20,7 @@ library(tm)
 library(openNLP)
 
 logfilename <- "connectref.log"
-log_data("hello")
+logdata("hello")
 
 
 #################################################################################### 

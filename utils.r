@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript 
 
 ################################################################################
-log_data <- function(...)
+logdata <- function(...)
 {
   dt <- format(Sys.time(), format="%d|%H:%M:%S")
   cat(sprintf("%s\n", paste(unlist(list(...)), collapse=" ")))
@@ -39,7 +39,7 @@ determine_most_likely_bib <- function(s5, d1)
     year1 <- gsub("^[[:punct:][:space:]]*|[[:punct:][:space:]]*$", "", year1)
   
     if(length(year1) > 1) {
-      log_data("determine_most_likely_bib - more than one year - pick the best year")
+      logdata("determine_most_likely_bib - more than one year - pick the best year")
       for(j in seq_len(length(year1))) {
         if(year1[j] > 1950 & year1[j] < 2030) {
           year1 <- year1[j]
@@ -52,7 +52,7 @@ determine_most_likely_bib <- function(s5, d1)
   if(length(year1) == 0) year1 <- NA
     
   if(is.na(year1)) {
-    log_data("year1 length is zero")
+    logdata("year1 length is zero")
     year1 <- ''
     year1_weight <- 0.5
   }
@@ -89,7 +89,7 @@ determine_most_likely_bib <- function(s5, d1)
     title1 <- gsub("^[[:punct:][:space:]]*|[[:punct:][:space:]]*$", "", title1)
     
     if(length(title1) > 1) {
-      log_data("determine_most_likely_bib - more than one title. Taking the first title:", title1[1])
+      logdata("determine_most_likely_bib - more than one title. Taking the first title:", title1[1])
       title1 <- title1[1]
     }
   }
@@ -97,7 +97,7 @@ determine_most_likely_bib <- function(s5, d1)
   if(length(title1) == 0) title1 <- NA
   
   if(is.na(title1)) {
-    log_data("title1 length is zero")
+    logdata("title1 length is zero")
     title1 <- ''
     year1_weight  <- 0.5
     title1_weight <- 0.1
@@ -139,36 +139,36 @@ my.LookupPubMedID <- function(bib1)
   success = FALSE
   while( success == FALSE & number_of_tries <= max_number_of_tries ) {
     tryCatch( {
-      log_data(paste0("my.LookupPubMedID() try: ", number_of_tries, " of ", max_number_of_tries)) 
+      logdata(paste0("my.LookupPubMedID() try: ", number_of_tries, " of ", max_number_of_tries)) 
 
       pbentry <- LookupPubMedID(bib1)
       success = TRUE
 
     }, warning = function( w ) {
-      log_data(paste0("my.LookupPubMedID() Warning in LookupPubMedID() message: \"", conditionMessage(w),
+      logdata(paste0("my.LookupPubMedID() Warning in LookupPubMedID() message: \"", conditionMessage(w),
         "\" - sleeping ", sleep_time_on_error, " seconds"))
       if(grepl("returned no matches", conditionMessage(w)) | grepl("Bad request", conditionMessage(w))) {
-        log_data("Exiting")
+        logdata("Exiting")
         number_of_tries <- max_number_of_tries + 1
       }
       Sys.sleep(sleep_time_on_error)
       number_of_tries <<- number_of_tries + 1
-      log_data(paste("(warning) my.LookupPubMedID() done sleeping"))
+      logdata(paste("(warning) my.LookupPubMedID() done sleeping"))
     }, error = function( e ) {
-      log_data(paste0("my.LookupPubMedID() Error in LookupPubMedID() message: \"", conditionMessage(e),
+      logdata(paste0("my.LookupPubMedID() Error in LookupPubMedID() message: \"", conditionMessage(e),
         "\" - sleeping ", sleep_time_on_error, " seconds"))
       if(grepl("Request-URI Too Long", conditionMessage(e)) | grepl("Bad request", conditionMessage(e))) {
-        log_data("Exiting")
+        logdata("Exiting")
         number_of_tries <- max_number_of_tries + 1
       }
       Sys.sleep(sleep_time_on_error)
       number_of_tries <<- number_of_tries + 1
-      log_data(paste("(error) my.LookupPubMedID() done sleeping"))
+      logdata(paste("(error) my.LookupPubMedID() done sleeping"))
     } ) # tryCatch ...
   } # while NOT success
 
   if( number_of_tries > max_number_of_tries ) {
-    log_data(paste("my.LookupPubMedID() Reached MAX number of tries.  Return NULL"))
+    logdata(paste("my.LookupPubMedID() Reached MAX number of tries.  Return NULL"))
     pbentry <- NULL
   }
 
@@ -185,7 +185,7 @@ my.ReadCrossRef <- function(s5)
   sleep_time <- 0.25 #seconds
 
   # in general, sleep a little bit before each call to meetup
-  #log_data(paste("my.ReadCrossRef() sleep before calling CrossRef: ",sleep_time, "seconds"))
+  #logdata(paste("my.ReadCrossRef() sleep before calling CrossRef: ",sleep_time, "seconds"))
   #Sys.sleep(sleep_time)
 
   sleep_time_on_error = 2 #seconds
@@ -196,44 +196,44 @@ my.ReadCrossRef <- function(s5)
   success = FALSE
   while( success == FALSE & number_of_tries <= max_number_of_tries ) {
     tryCatch( {
-      log_data(paste0("my.ReadCrossRef() try: ", number_of_tries, " of ", max_number_of_tries)) 
+      logdata(paste0("my.ReadCrossRef() try: ", number_of_tries, " of ", max_number_of_tries)) 
 
       bib1 <- ReadCrossRef(s5)
       
       if(any(class(bib1) == c("BibEntry", "bibentry"))) {
          success = TRUE
       } else {
-        log_data("Not a valid response")
+        logdata("Not a valid response")
         Sys.sleep(sleep_time_on_error)
         number_of_tries <- number_of_tries + 1
-        log_data(paste("my.ReadCrossRef() done sleeping"))
+        logdata(paste("my.ReadCrossRef() done sleeping"))
       } 
       
     }, warning = function( w ) {
-      log_data(paste0("my.ReadCrossRef() Warning in ReadCrossRef() message: \"", conditionMessage(w),
+      logdata(paste0("my.ReadCrossRef() Warning in ReadCrossRef() message: \"", conditionMessage(w),
         "\" - sleeping ", sleep_time_on_error, " seconds"))
       if(grepl("returned no matches", conditionMessage(w)) | grepl("Bad request", conditionMessage(w))) {
-        log_data("Exiting")
+        logdata("Exiting")
         number_of_tries <- max_number_of_tries + 1
       }
       Sys.sleep(sleep_time_on_error)
       number_of_tries <<- number_of_tries + 1
-      log_data(paste("(warning) my.ReadCrossRef() done sleeping"))
+      logdata(paste("(warning) my.ReadCrossRef() done sleeping"))
     }, error = function( e ) {
-      log_data(paste0("my.ReadCrossRef() Error in ReadCrossRef() message: \"", conditionMessage(e),
+      logdata(paste0("my.ReadCrossRef() Error in ReadCrossRef() message: \"", conditionMessage(e),
         "\" - sleeping ", sleep_time_on_error, " seconds"))
       if(grepl("Request-URI Too Long", conditionMessage(e)) | grepl("Bad request", conditionMessage(e))) {
-        log_data("Exiting")
+        logdata("Exiting")
         number_of_tries <- max_number_of_tries + 1
       }
       Sys.sleep(sleep_time_on_error)
       number_of_tries <<- number_of_tries + 1
-      log_data(paste("(error) my.ReadCrossRef() done sleeping"))
+      logdata(paste("(error) my.ReadCrossRef() done sleeping"))
     } ) # tryCatch ...
   } # while NOT success
 
   if( number_of_tries > max_number_of_tries ) {
-    log_data(paste("my.ReadCrossRef() Reached MAX number of tries.  Return NULL"))
+    logdata(paste("my.ReadCrossRef() Reached MAX number of tries.  Return NULL"))
     bib1 <- NULL
   }
 
@@ -252,36 +252,36 @@ my.orcid <- function(query='', rows=10)
   success = FALSE
   while( success == FALSE & number_of_tries <= max_number_of_tries ) {
     tryCatch( {
-    	if(number_of_tries != 1) log_data(paste0("my.orcid() try: ", number_of_tries, " of ", max_number_of_tries)) 
+    	if(number_of_tries != 1) logdata(paste0("my.orcid() try: ", number_of_tries, " of ", max_number_of_tries)) 
 
       res <- orcid(query = query, rows=rows)
       success = TRUE
       
     }, warning = function( w ) {
-      log_data(paste0("my.orcid() Warning in orcid() message: \"", conditionMessage(w),
+      logdata(paste0("my.orcid() Warning in orcid() message: \"", conditionMessage(w),
         "\" - sleeping ", sleep_time_on_error, " seconds"))
       if(grepl("returned no matches", conditionMessage(w)) | grepl("Bad request", conditionMessage(w))) {
-        log_data("Exiting")
+        logdata("Exiting")
         number_of_tries <- max_number_of_tries + 1
       }
       Sys.sleep(sleep_time_on_error)
       number_of_tries <<- number_of_tries + 1
-      log_data(paste("(warning) my.orcid() done sleeping"))
+      logdata(paste("(warning) my.orcid() done sleeping"))
     }, error = function( e ) {
-      log_data(paste0("my.orcid() Error in orcid() message: \"", conditionMessage(e),
+      logdata(paste0("my.orcid() Error in orcid() message: \"", conditionMessage(e),
         "\" - sleeping ", sleep_time_on_error, " seconds"))
       if(grepl("Request-URI Too Long", conditionMessage(e)) | grepl("Bad request", conditionMessage(e))) {
-        log_data("Exiting")
+        logdata("Exiting")
         number_of_tries <- max_number_of_tries + 1
       }
       Sys.sleep(sleep_time_on_error)
       number_of_tries <<- number_of_tries + 1
-      log_data(paste("(error) my.orcid() done sleeping"))
+      logdata(paste("(error) my.orcid() done sleeping"))
     } ) # tryCatch ...
   } # while NOT success
 
   if( number_of_tries > max_number_of_tries ) {
-    log_data(paste("my.orcid() Reached MAX number of tries.  Return NULL"))
+    logdata(paste("my.orcid() Reached MAX number of tries.  Return NULL"))
     res <- NULL
   }
 

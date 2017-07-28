@@ -693,15 +693,15 @@ initialize_neo4j <- function(dbname=NULL, host='local', delete_db=F)
 {
   print("set up Neo4j database")
   if(host == 'local') {
-    log_data("Using local host")
+    logdata("Using local host")
     db_url <- "http://localhost:7474/db/data"
     db <- startGraph(db_url)
   } else if(host == 'AWS') {
-    log_data("Using AWS host")
+    logdata("Using AWS host")
     db_url <- "http://mgh.kluriganalytics.com:7474/db/data"
     db <- startGraph(db_url, username='neo4j', password='hpr284')
   } else {
-    log_data("ERROR: Unknown host")
+    logdata("ERROR: Unknown host")
   }
   if(is.null(dbname)) {
     #dbname <- "arg3"  # this is the real one
@@ -709,7 +709,7 @@ initialize_neo4j <- function(dbname=NULL, host='local', delete_db=F)
     #dbname <- "arg5"  # testing of new docid functionality from massCATS documents
     dbname <- "arg1"  # July 13, 2017 
   }
-  log_data("Using", dbname, "as database")
+  logdata("Using", dbname, "as database")
 
   if(delete_db) delete_nodes_db(db, dbname)
   

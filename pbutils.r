@@ -8,19 +8,19 @@ convert_pmid <- function(pmid)
   tryCatch( {
     r1 <- id_converter(pmid, "pmid")
   }, error = function( e ) {
-    log_data("convert_pmid() - Cought an error:", conditionMessage(e)) 
+    logdata("convert_pmid() - Cought an error:", conditionMessage(e)) 
   } ) 
     
   if(!is.null(r1) & is.null(r1$records$live)) {
     d1 <- r1$records
     d2 <- d1$versions[[1]]
-    #log_data("Found data - pmid:", d1$pmid, " pmcid:", d1$pmcid, " doi:", d1$doi, " v-pmcid:", d2$pmcid, " v-mid:", d2$mid, " v-current:", d2$current)
+    #logdata("Found data - pmid:", d1$pmid, " pmcid:", d1$pmcid, " doi:", d1$doi, " v-pmcid:", d2$pmcid, " v-mid:", d2$mid, " v-current:", d2$current)
     pmidx     <- ifelse(!is.null(d1$pmid),  d1$pmid,  '')
     pmcid     <- ifelse(!is.null(d1$pmcid), d1$pmcid, '')
     pmcid_ver <- ifelse(!is.null(d2$pmcid), d2$pmcid, '')
     d3 <- data.frame(pmid=pmidx, pmcid=pmcid, pmcid_ver=pmcid_ver, stringsAsFactors=F)
   } else {
-    #log_data("did not retrieve data for the pmid:", pmid)
+    #logdata("did not retrieve data for the pmid:", pmid)
     d3 <- NULL
   }
   return(d3)
@@ -145,7 +145,7 @@ find_orcid <- function(dauth, doi)
   
   res1 <- d2 <- data.frame()
   for(i in seq_len(nrow(dauth))) {
-    log_data(sprintf("%d of %d  last: %s  first: %s  middle: %s", i, nrow(dauth), dauth$last[i], dauth$first[i], dauth$middle[i]))
+    logdata(sprintf("%d of %d  last: %s  first: %s  middle: %s", i, nrow(dauth), dauth$last[i], dauth$first[i], dauth$middle[i]))
     if(dauth$orcid[i] != '') next ;
     
     if(dauth$middle[i] == '') {
@@ -208,7 +208,7 @@ are_names_close_enough <- function(newname, dbnames)
   # 2. return False if the length of  both first names is greater than 1, and 
   #    if they are different
   if((nchar(newname$first) > 1 & nchar(dbnames$first) > 1) & (newname$first != dbnames$first)) {
-    #log_data("1. records are not the same - returning false")
+    #logdata("1. records are not the same - returning false")
     return(FALSE)
   }
 
@@ -218,33 +218,33 @@ are_names_close_enough <- function(newname, dbnames)
 
   if((nchar(newname$first) > 1 & nchar(dbnames$first) == 1) &
      ((newname$middle != dbnames$middle) | (newname$middle == '' & dbnames$middle == ''))) {
-    #log_data("2. records are not the same - returning false")
+    #logdata("2. records are not the same - returning false")
     return(FALSE)
   }
   
   # 4. check middle names, even though that might not matter
-  #if(substring(newname$middle,1,1) == substring(dbnames$middle,1,1)) { log_data("middle initials are the same")
-  #} else { log_data("middle initials are not the same")}
+  #if(substring(newname$middle,1,1) == substring(dbnames$middle,1,1)) { logdata("middle initials are the same")
+  #} else { logdata("middle initials are not the same")}
   
   # OK, the names are the same!
   
   # 5. if newname$first is longer than the dbnames$first, then update the database with the longer name
   if(nchar(newname$first) > nchar(dbnames$first)) {
-    log_data("5. update database with new first name")
+    logdata("5. update database with new first name")
     q1 <- paste0("update authors set first = '", newname$first, "' where auid = ", dbnames$auid, ";")
     calldb(q1)
   }
   
   # 6. if newname$middle is longer than the dbnames$middle, then update the database with the longer name
   if(nchar(newname$middle) > nchar(dbnames$middle)) {
-    log_data("6. update database with new middle name")
+    logdata("6. update database with new middle name")
     q1 <- paste0("update authors set middle = '", newname$middle, "' where auid = ", dbnames$auid, ";")
     calldb(q1)
   }
   
   # 7. if new names have an ORCID entry AND dbnames do not have an ORCID, then update the database with the ORCID entry
   if(!is.null(newname$orcid) & is.null(dbnames$orcid)) {
-    log_data("update ORCID")
+    logdata("update ORCID")
     q1 <- paste0("7a. update authors set orcid = '", newname$orcid, "' where auid = ", dbnames$auid, ";")
     calldb(q1)
     q1 <- paste0("7b. update authors set orcscore = '", newname$orcscore, "' where auid = ", dbnames$auid, ";")
@@ -272,13 +272,13 @@ deduping_authors <- function(dauth, verbose=F)
   #refs <- lapply(dauth, function(x) gsub("'", "''", x))  %>% as.data.frame(stringsAsFactors=F)
   
   for(i in seq_len(nrow(dauth))) {
-    if(verbose) log_data(sprintf("dauth:%d  last: %s  first: %s  middle: %s", i, dauth$last[i], dauth$first[i], dauth$middle[i]))
+    if(verbose) logdata(sprintf("dauth:%d  last: %s  first: %s  middle: %s", i, dauth$last[i], dauth$first[i], dauth$middle[i]))
     p1 <- calldb(paste0("select * from authors where last = '", gsub("'", "''", dauth$last[i]), "' and substring(first,1,1) = '", substring(dauth$first[i],1,1), "';"))
     
     for(j in seq_len(nrow(p1))) {
-      if(verbose) log_data(sprintf("p1   :%d  last: %s  first: %s  middle: %s", j, p1$last[j], p1$first[j], p1$middle[j]))
+      if(verbose) logdata(sprintf("p1   :%d  last: %s  first: %s  middle: %s", j, p1$last[j], p1$first[j], p1$middle[j]))
       if(are_names_close_enough(dauth[i,], p1[j,])) {
-        #log_data("names are in the database already")
+        #logdata("names are in the database already")
         index_not_to_add <- c(index_not_to_add, i)
         found_auid <- c(found_auid, p1$auid[j])
         break ;
@@ -348,9 +348,9 @@ find_store_in_pubmed_pmid <- function(docid, pmid, bib2 = NULL, docname = NULL)
     tryCatch( {
       df <- as.data.frame(b1)
     }, error = function( e ) {
-      log_data("find_store_in_pubmed() - Cought an error:", conditionMessage(e), "return NULL") 
-      log_data("                       - Seems as though there is a problem with a bib entry") 
-      log_data("                       - pmid is NULL - docid:", docid) 
+      logdata("find_store_in_pubmed() - Cought an error:", conditionMessage(e), "return NULL") 
+      logdata("                       - Seems as though there is a problem with a bib entry") 
+      logdata("                       - pmid is NULL - docid:", docid) 
       return_now <<- TRUE
     } ) 
     if(return_now) return(NULL);
@@ -394,7 +394,7 @@ find_store_in_pubmed_pmid <- function(docid, pmid, bib2 = NULL, docname = NULL)
   docs1 <- insert_into_docs(d1)
   
   if(is.null(b1$author)) {
-    log_data("find_store_in_pubmed - docid:", docid, " d1$doi:", d1$doi, " has no authors, so returning NULL")
+    logdata("find_store_in_pubmed - docid:", docid, " d1$doi:", d1$doi, " has no authors, so returning NULL")
     return(NULL)
   }
 

@@ -17,14 +17,14 @@ dir.create(imageDir, showWarnings=F)
 dir.create(textDir, showWarnings=F)
 
 source(file.path(codeDir, "utils.r"))
-source(file.path(codeDir, "tm_utils.r"))
 source(file.path(codeDir, "db.r"))
 source(file.path(codeDir, "pbutils.r"))
 
-library(dplyr)
-library(tidyr)
-library(stringr)
-library(tm)
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(stringr)
+  library(tm)
+})
 
 # need to call this such that we can access correct database
 SQL_DATABASE_NAME <- 'mgh'
@@ -105,7 +105,7 @@ remove_duplicate_files <- function(docid)
   # remove duplicate files
   file2 <- d8$path[duplicated(d8$checksum) | duplicated(d8$checksum, fromLast=TRUE)]
   if(length(file2) > 0) {
-    log_data("Removing", length(file2), "duplicate files (based on md5sum())")
+    logdata("Removing", length(file2), "duplicate files (based on md5sum())")
     quiet <- file.remove(file2)
   }
 }
@@ -132,7 +132,7 @@ remove_known_files <- function(docid)
   # remove known files
   for(i in seq_len(nrow(d8))) {
     if(any(grep(d8$checksum[i], checksums))) {
-      log_data("removing known file:", d8$path[i])
+      logdata("removing known file:", d8$path[i])
       file.remove(d8$path[i])
     }
   }
@@ -233,7 +233,7 @@ extract_pages_and_text <- function(docid)
   dimages <- calldb(paste("select * from images where docid=", docid, "; "))
   
   if(nrow(dimages) == 0) {
-    log_data("extract_pages_and_text - no images to work from - docid:", docid)
+    logdata("extract_pages_and_text - no images to work from - docid:", docid)
     return(NULL)
   }
   
@@ -386,7 +386,7 @@ extract_pages_and_text <- function(docid)
   
   # insert into database
   if(nrow(image_meta) == 0) {
-    log_data("No image meta data for docid", docid, " so no insert into the database")
+    logdata("No image meta data for docid", docid, " so no insert into the database")
   } else {
     
     df <- image_meta %>% mutate(type="lines", docid=docid) %>%
@@ -403,7 +403,7 @@ extract_pages_and_text <- function(docid)
     image_meta <- df
     
     if(any(duplicated(image_meta$imagefile))) 
-      log_data("images.r: WARNING - image_meta$imagefile is not unique - will not be able to write to database - docid:", docid)
+      logdata("images.r: WARNING - image_meta$imagefile is not unique - will not be able to write to database - docid:", docid)
     update_images(docid, image_meta)
   }
   
@@ -615,7 +615,7 @@ find_and_pair_image_references <- function(docid)
 total_clean_the_system_for_database_and_directories <- function(DELETE_ALL=F)
 {
   if(DELETE_ALL) {
-    log_data("deleting files and content of database tables")
+    logdata("deleting files and content of database tables")
     calldb("delete from imagerefs;") ; calldb("delete from images;")
     calldb("select count(*) from imagerefs;") ; calldb("select count(*) from images;")
     unlink(file.path(imageDir, "*.png"))
@@ -632,7 +632,7 @@ do_images <- function(pdfDocs, pdfDir, DELETE_IMAGES_TABLES=F)
     # pdfDocs is not NULL, then make sure that the file exists in the database before we proceed
     x1 <- calldb(paste0("select filename from docs where filename = '", pdfDocs, "';"))
     if(nrow(x1) == 0) {
-      log_data("Error: file ", pdfDocs, "does not exists in the database - exiting")
+      logdata("Error: file ", pdfDocs, "does not exists in the database - exiting")
       return(NULL)
     }
   }
@@ -643,13 +643,13 @@ do_images <- function(pdfDocs, pdfDir, DELETE_IMAGES_TABLES=F)
   for(i in seq_len(length(pdfDocs))) {
     docid <- calldb(paste0("select docid from docs where filename = '", pdfDocs[i], "';"))$docid
     if(length(docid) == 0) {
-      log_data("Warning - could not find file '", pdfDocs[i], "' in table docs")
+      logdata("Warning - could not find file '", pdfDocs[i], "' in table docs")
       next
     }
     docid <- as.integer(docid)
     
-    log_data("----------------------------------------------------")
-    log_data(paste(i, "running process on docid:", docid, " filename: ", pdfDocs[i]))
+    logdata("----------------------------------------------------")
+    logdata(paste(i, "running process on docid:", docid, " filename: ", pdfDocs[i]))
     retval <- extract_images(docid=docid, filename=pdfDocs[i], remove_old_files=F)
     if(is.null(retval)) next
     extract_pages_and_text(docid=docid)
@@ -668,7 +668,7 @@ do_images <- function(pdfDocs, pdfDir, DELETE_IMAGES_TABLES=F)
 #  pdfDocs <- '22801501_Johnson_A_mutation_in_APP.pdf' ; i <- 1 ; pdfDir <- NULL
 #  pdfDocs <- '24162737_Lambert_Meta-analysis_of_74046_individuals.pdf' ; i <- 1 ; pdfDir <- NULL
 
-log_data("==================== START OF RUN =================")
+logdata("==================== START OF RUN =================")
 t1 <- proc.time()
 
 
@@ -676,22 +676,22 @@ process_file <- FALSE
 if( length( commandArgs() ) == 6 ) {
   filenamex <- commandArgs()[6]
   if(tolower(filenamex) == 'all') {
-    log_data("Do all files")
+    logdata("Do all files")
     pdfDocs <- pdfDir <- NULL
     process_file <- TRUE
   } else if(file.exists(filenamex))  {
-    log_data("Process file:", filenamex)
+    logdata("Process file:", filenamex)
     if(0){filenamex <- "/home_ssd/dag/0-Annat/0-R/customers/mgh/data/top50alz/20042704_Petersen_ADNI_Clinical_characterization.pdf"}
     pdfDocs <- basename(filenamex)
     pdfDir <- dirname(filenamex)
     process_file <- TRUE
   } else if(!file.exists(filenamex))  {
-    log_data("Error: file", filenamex, "does not exists - exiting")
-    log_data("NOTE - we need absolute addresses to files")
+    logdata("Error: file", filenamex, "does not exists - exiting")
+    logdata("NOTE - we need absolute addresses to files")
     process_file <- FALSE
   }
 } else {
-  log_data("Input must be either 'all' for all files or a filename with an absolute file path") 
+  logdata("Input must be either 'all' for all files or a filename with an absolute file path") 
   process_file <- FALSE
 }
 
@@ -702,7 +702,7 @@ s <- proc.time()[3] - t1[3]
 s <- as.integer(s)
 h <- s %/% 3600 ; s <- s - (h*3600) ; 
 m <- s %/% 60   ; s <- s - (m*60)   ; 
-log_data("")
-log_data(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
-log_data("==================== END OF RUN =================")
+logdata("")
+logdata(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
+logdata("==================== END OF RUN =================")
 

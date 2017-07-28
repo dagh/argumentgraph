@@ -576,11 +576,11 @@ get_bibentry <- function(s5)
   
   bib <- my.ReadCrossRef(s5)
   if(is.null(bib)) {
-    log_data(sprintf("No results found in CrossRef for \"%s\" (string length nchar: %d)", s5, nchar(s5)))
+    logdata(sprintf("No results found in CrossRef for \"%s\" (string length nchar: %d)", s5, nchar(s5)))
     return(NULL)
   }
   if(length(bib$author) == 0) {
-    log_data("Author length is zero, therefore assume this bib is no good, so return")
+    logdata("Author length is zero, therefore assume this bib is no good, so return")
     return(NULL)
   }
   
@@ -646,9 +646,9 @@ store_refs_info <- function(docid, dlists, reference_list)
     (d7 <- calldb(paste0("select docid, pmid, doi from docs where docid = '", newdocid, "' ;")))
   
     if(nrow(d7) == 0) {
-      log_data("something really weird because d7 should never be zero rows")
-      log_data("     Perhaps there was an error cought in find_store_in_pubmed_pmid()")
-      log_data("     newdocid:", newdocid)
+      logdata("something really weird because d7 should never be zero rows")
+      logdata("     Perhaps there was an error cought in find_store_in_pubmed_pmid()")
+      logdata("     newdocid:", newdocid)
       return(NULL)
     }
   

@@ -12,16 +12,17 @@ outputDir <- file.path(rootDir, "output")
 claimDir  <- file.path(rootDir, "find_claim")
 
 source(file.path(codeDir, "utils.r"))
-source(file.path(codeDir, "tm_utils.r"))
 source(file.path(codeDir, "db.r"))
 
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(stringr))
-suppressPackageStartupMessages(library(tm))
-suppressPackageStartupMessages(library(openNLP))
-suppressPackageStartupMessages(library(RefManageR))
-suppressPackageStartupMessages(library(rorcid))
-suppressPackageStartupMessages(library(rcrossref))
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(stringr)
+  library(tm)
+  library(openNLP)
+  library(RefManageR)
+  library(rorcid)
+  library(rcrossref)
+})
 
 # need to call this such that we can access correct database
 
@@ -77,10 +78,10 @@ find_terms_in_text <- function(lines, jrnl, t1)
     	# if this is NEJM, then assume that the later term is correct term, so pick the highest number
       index <- max(index)
     } else {
-      log_data("WARNING WARNING")
-      log_data(sprintf("  found more than one entry for term: \"%s\" - row numbers: %s", t1, paste(index, collapse=" ")))
-      log_data("we will be using the lowest index")
-      log_data("WARNING WARNING")
+      logdata("WARNING WARNING")
+      logdata(sprintf("  found more than one entry for term: \"%s\" - row numbers: %s", t1, paste(index, collapse=" ")))
+      logdata("we will be using the lowest index")
+      logdata("WARNING WARNING")
       index <- min(index)
     }
   }
@@ -98,7 +99,7 @@ read_in_files_sent <- function(lines, jrnl, term1)
   lines <- gsub("^\f", "", lines)
   
   for(t1 in term1) {
-    #log_data(sprintf("t1: %s", t1))
+    #logdata(sprintf("t1: %s", t1))
     index <- find_terms_in_text(lines, jrnl, t1)
     if(length(index) > 0) break ; 
   } 
@@ -111,7 +112,7 @@ read_in_files_sent <- function(lines, jrnl, term1)
 #####################################################################################
 read_in_text_blocks <- function(pdfDocs, pdfDir)
 {
-  log_data("read_in_text_blocks")
+  logdata("read_in_text_blocks")
   inspect_doc <- FALSE
   
   pdfDocs <- sort(pdfDocs)
@@ -125,11 +126,11 @@ read_in_text_blocks <- function(pdfDocs, pdfDir)
     docinfo <- calldb(paste0("select docid, pmid, journal from docs where filename = '", doc, "' ;"))
 
     if(nrow(docinfo) == 0) {
-      log_data("WARNING - did not find a document in the database for docname:", doc)
+      logdata("WARNING - did not find a document in the database for docname:", doc)
       next ;
     }
-    log_data("-------------------------------------------------------------------------")
-    log_data(i, " docid:", docinfo$docid, " document in process: ", doc)
+    logdata("-------------------------------------------------------------------------")
+    logdata(i, " docid:", docinfo$docid, " document in process: ", doc)
     doc1 <- file.path(pdfDir, doc)
 
     # 1. create VCorpus
@@ -149,7 +150,7 @@ read_in_text_blocks <- function(pdfDocs, pdfDir)
     lines <- clean_all_data(lines) # remove funny characters such as new line, formfeed etc.
     lines <- lines[nchar(lines) > 0] # remove lines with no characters
     
-    log_data("write lines to lines1.csv and to database")
+    logdata("write lines to lines1.csv and to database")
     write.csv(lines, file=file.path(codeDir,"lines1.csv"), row.names=F)
     insert_into_text(docinfo$docid, 'lines', text=data.frame(text=lines,stringsAsFactors=F), insert=T)
 
@@ -185,7 +186,7 @@ read_in_text_blocks <- function(pdfDocs, pdfDir)
     txt2 <- gsub("This is a sentence.", "", txt2)
     txt2 <- txt2[nchar(txt2) > 0] # remove lines with no characters
     
-    log_data("write sentences to sent1.csv and to database")
+    logdata("write sentences to sent1.csv and to database")
     write.csv(txt2, file=file.path(codeDir,"sent1.csv"), row.names=F)
     insert_into_text(docinfo$docid, 'sent', data.frame(text=txt2,stringsAsFactors=F), insert=T)
   
@@ -205,7 +206,7 @@ read_in_text_blocks <- function(pdfDocs, pdfDir)
     insert_into_blocks(docinfo$docid, 'sent', p2, insert=T)
   }
   
-  log_data("write results to results_sent2.csv file")
+  logdata("write results to results_sent2.csv file")
   write.csv(p3, file.path(codeDir, "results_sent2.csv"),row.names=F)
 }
 
@@ -214,7 +215,7 @@ find_rhetorical_blocks <- function(pdfDocs, pdfDir, DELETE_DATABASE=F)
 {
   disconnect_all_mysql_connections()
   
-  log_data("count from current database")
+  logdata("count from current database")
   get_count_from_tables()
   if(DELETE_DATABASE) { delete_from_tables() }
   
@@ -226,7 +227,7 @@ find_rhetorical_blocks <- function(pdfDocs, pdfDir, DELETE_DATABASE=F)
     # pdfDocs is not NULL, then make sure that the file exists in the database before we proceed
     x1 <- calldb(paste0("select filename from docs where filename = '", pdfDocs, "';"))
     if(nrow(x1) == 0) {
-      log_data("Error: file ", pdfDocs, "does not exists in the database - exiting")
+      logdata("Error: file ", pdfDocs, "does not exists in the database - exiting")
       return(NULL)
     }
   }
@@ -236,7 +237,7 @@ find_rhetorical_blocks <- function(pdfDocs, pdfDir, DELETE_DATABASE=F)
 
   read_in_text_blocks(sort(pdfDocs), pdfDir)
 
-  log_data("count from current database")
+  logdata("count from current database")
   get_count_from_tables()
 }
 
@@ -245,29 +246,29 @@ find_rhetorical_blocks <- function(pdfDocs, pdfDir, DELETE_DATABASE=F)
 # MAIN main Main
 #
 
-log_data("==================== START OF RUN =================")
+logdata("==================== START OF RUN =================")
 t1 <- proc.time()
 
 process_file <- FALSE
 if( length( commandArgs() ) == 6 ) {
   filenamex <- commandArgs()[6]
   if(tolower(filenamex) == 'all') {
-    log_data("Do all files")
+    logdata("Do all files")
     pdfDocs <- pdfDir <- NULL
     process_file <- TRUE
   } else if(file.exists(filenamex))  {
-    log_data("Process file:", filenamex)
+    logdata("Process file:", filenamex)
     if(0){filenamex <- "/home_ssd/dag/0-Annat/0-R/customers/mgh/data/top50alz/20042704_Petersen_ADNI_Clinical_characterization.pdf"}
     pdfDocs <- basename(filenamex)
     pdfDir <- dirname(filenamex)
     process_file <- TRUE
   } else if(!file.exists(filenamex))  {
-    log_data("Error: file", filenamex, "does not exists - exiting")
-    log_data("NOTE - we need absolute addresses to files")
+    logdata("Error: file", filenamex, "does not exists - exiting")
+    logdata("NOTE - we need absolute addresses to files")
     process_file <- FALSE
   }
 } else {
-  log_data("Input must be either 'all' for all files or a filename with an absolute file path") 
+  logdata("Input must be either 'all' for all files or a filename with an absolute file path") 
   process_file <- FALSE
 }
 
@@ -277,7 +278,7 @@ s <- proc.time()[3] - t1[3]
 s <- as.integer(s)
 h <- s %/% 3600 ; s <- s - (h*3600) ; 
 m <- s %/% 60   ; s <- s - (m*60)   ; 
-log_data("")
-log_data(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
-log_data("==================== END OF RUN =================")
+logdata("")
+logdata(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
+logdata("==================== END OF RUN =================")
 

@@ -3,11 +3,13 @@
 rootDir=/home_ssd/dag/0-Annat/0-R/customers/mgh
 
 codeDir=$(rootDir)/code
-sqlDir=$(rootDir)/sql
+sqlDir=$(codeDir)/sql
+#sqlDir=$(rootDir)/sql
 imageDir=$(rootDir)/images
 textDir=$(rootDir)/text
 dbname=mgh
 neoname=arg3
+neoname_massCats=arg2
 
 $(info )
 $(info -------------------------------------------------)
@@ -22,7 +24,7 @@ $(info -------------------------------------------------)
 .ONESHELL:
 
 all: docauthors findblocks references images graph
-clean_all: clean_claims clean_refs clean_text_blocks clean_auth_docs clean_images clean_graph
+clean_all: clean_claims clean_refs clean_text_blocks clean_auth_docs clean_images clean_graph_argument clean_graph_massCats
 
 #-----------------------------------------------------
 all1:
@@ -30,6 +32,8 @@ all1:
 	./docauthors.r all
 	./findblocks.r all
 	./references.r all
+	./images.r all
+	./graph.r all
 
 #-----------------------------------------------------
 # a little program that inserts filenames into the docs table for massCATS type documents
@@ -54,7 +58,7 @@ images:
 docauthors:
 	$(info )
 	cd $(codeDir)
-	./docauthors.r
+	./docauthors.r all
 	./db countmgh
 
 #-----------------------------------------------------
@@ -62,7 +66,7 @@ docauthors:
 findblocks:
 	$(info )
 	cd $(codeDir)
-	./findblocks.r
+	./findblocks.r all
 	./db countmgh
 
 #-----------------------------------------------------
@@ -70,9 +74,9 @@ findblocks:
 references:
 	$(info )
 	cd $(codeDir)
-	./references.r find_references
-	./references.r parse_reference_list
-	./references.r find_bibentry
+	./references.r find_references 
+	./references.r parse_reference_list 
+	./references.r find_bibentry 
 	./db countmgh
 
 #-----------------------------------------------------
@@ -137,10 +141,14 @@ clean_claims:
 	mysql < claims.sql
 	
 #-----------------------------------------------------
-clean_graph:
+clean_graph_argument:
 	neo4j-shell -c "match (n:$(neoname)) detach delete n;"
 	./db -summary
 
+#-----------------------------------------------------
+clean_graph_massCats:
+	neo4j-shell -c "match (n:$(neoname_massCats)) detach delete n;"
+	./db -summary
 
 #-----------------------------------------------------
 countmgh:
@@ -156,6 +164,4 @@ indexes:
 	cypher-shell "create index on :itxt(linenumber);"
 	cypher-shell "create index on :cap(figid);"
 	cypher-shell "create index on :img(imageid);"
-
-
 

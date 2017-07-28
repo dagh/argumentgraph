@@ -75,7 +75,7 @@ build_aut_node <- function(db, dbname, docid)
     "where ad.docid=", docid, "; "))
 
   if(nrow(d1) == 0) {
-    log_data("WARNING - no authors for docid:", docid)
+    logdata("WARNING - no authors for docid:", docid)
     return(NULL)
   }
   
@@ -114,7 +114,7 @@ build_txt_for_docs_node <- function(db, dbname, docid, refid, type='sent')
 {
   
   if(length(refid) == 0) {
-    log_data("WARNING - build_txt_for_docs_node - there are no references for docid:", docid)
+    logdata("WARNING - build_txt_for_docs_node - there are no references for docid:", docid)
     return(NULL)
   }
   
@@ -126,7 +126,7 @@ build_txt_for_docs_node <- function(db, dbname, docid, refid, type='sent')
                       "and r.docid='", docid, "' and r.refid in (", q2, ") ;"))
   
   if(nrow(d1) == 0) {
-    log_data("WARNING - no text for docid:", docid)
+    logdata("WARNING - no text for docid:", docid)
     return(NULL)
   }
   
@@ -161,7 +161,7 @@ build_ref_node <- function(db, dbname, docid, refid, type='sent')
 {
   
   if(length(refid) == 0) {
-    log_data("WARNING - build_ref_node - there are no references for docid:", docid)
+    logdata("WARNING - build_ref_node - there are no references for docid:", docid)
     return(NULL)
   }
   
@@ -173,7 +173,7 @@ build_ref_node <- function(db, dbname, docid, refid, type='sent')
                       "where docid='", docid, "' and refdocid is not NULL and refid in (", q2, ") ;"))
   
   if(nrow(d1) == 0) {
-    log_data("WARNING - no references for docid:", docid)
+    logdata("WARNING - no references for docid:", docid)
     return(NULL)
   }
 
@@ -223,7 +223,7 @@ build_ref_node <- function(db, dbname, docid, refid, type='sent')
 build_txt_and_ref <- function(db, dbname, docid, refid, type)
 {
   if(length(refid) == 0) {
-    log_data("WARNING - build_txt_and_ref - there are no references for docid:", docid)
+    logdata("WARNING - build_txt_and_ref - there are no references for docid:", docid)
     return(NULL)
   }
   
@@ -237,7 +237,7 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
   #write.csv(d1, file.path(codeDir, "d1.csv"),row.names=F)
   
   if(nrow(d1) == 0) {
-    log_data("WARNING - no text for docid:", docid)
+    logdata("WARNING - no text for docid:", docid)
     return(NULL)
   }
   
@@ -246,9 +246,11 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
   #write.csv(d1, file=file.path(codeDir, "d1.csv"), row.names=F)
 
   for(i in seq_len(nrow(d1))) {
+    if(is.na(d1$refdocid[i])) next ; 
+
     # 1. create rtxt node
     query_all <- as.character(NULL)
-    log_data("----- i:", i, "create rtxt node: linenumber:", d1$linenumber[i])
+    logdata("----- i:", i, "create rtxt node: linenumber:", d1$linenumber[i])
     (q1 <- paste0("merge (n:", dbname, ":", RTXTNODE, " {",
                   "docid:'", d1$docid[i], "', ", 
                   "type:'", d1$type[i], "', ", 
@@ -263,7 +265,7 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
     if(0) {
     # don't build the ref node at all. It is not useful for the graph
     # 2. create the ref node
-    log_data("i:", i, "create ref node: linenumber:", d1$refid[i])
+    logdata("i:", i, "create ref node: linenumber:", d1$refid[i])
     (q1 <- paste0("merge (n:", dbname, ":", REFNODE, " {",
                   "docid:'", d1$docid[i], "', ", 
                   "refid:'", d1$refid[i], "', ", 
@@ -280,7 +282,7 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
     if(0) {
     # don't build the ref node at all. It is not useful for the graph
     # 3. connect rtxt node with ref node
-    log_data("i:", i, "connect rtxt with ref node")
+    logdata("i:", i, "connect rtxt with ref node")
     q1 <- paste0("match (n:", dbname, ":", RTXTNODE, " {docid:'", docid, "',  type:'", d1$type[i],   "', linenumber:'", d1$linenumber[i], "' }),", 
             "(m:", dbname, ":", REFNODE, " {docid:'", docid, "', refid:'", d1$refid[i], "'}) ", 
             "merge (n)-[r:", RTXT_REF_REL, "]->(m) ",
@@ -290,7 +292,7 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
     }
 
     # 4. connect rtxt to doc node 
-    log_data("i:", i, "connect rtxt with doc node")
+    logdata("i:", i, "connect rtxt with doc node")
     q1 <- paste0("match (n:", dbname, ":", RTXTNODE, " {docid:'", docid, "', type:'", d1$type[i], "', linenumber:'", d1$linenumber[i], "' }), ", 
                  "(m:", dbname, ":", DOCNODE, " {docid:'", docid, "'}) ", 
                  "merge (m)-[r:", DOC_RTXT_REL, "]->(n) ",
@@ -298,15 +300,15 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
                  "on match set r.count = r.count+1 ")
     query_all <- paste0(query_all, query_sep, q1)
     
-    log_data("i:", i, " build doc node for refdocid:", d1$refdocid[i])
+    logdata("i:", i, " build doc node for refdocid:", d1$refdocid[i])
     build_doc_node(db, dbname, d1$refdocid[i])
-    log_data("i:", i, " build author nodes for refdocid:", d1$refdocid[i])
+    logdata("i:", i, " build author nodes for refdocid:", d1$refdocid[i])
     build_aut_node(db, dbname, d1$refdocid[i])
     
     if(0) {
     # don't build the ref node at all. It is not useful for the graph
     # attach ref node to new doc node
-    log_data("i:", i, "connect ref with new doc node - refdocid:", d1$refdocid[i])
+    logdata("i:", i, "connect ref with new doc node - refdocid:", d1$refdocid[i])
     q1 <- paste0("match (n:", dbname, ":", REFNODE, "{refdocid:'", d1$refdocid[i], "' }),", 
                  "(m:", dbname, ":", DOCNODE, "{ docid:'", d1$refdocid[i], "'})", 
                  "merge (n)-[r:", REF_DOC_REL, "]->(m) ",
@@ -315,7 +317,7 @@ build_txt_and_ref <- function(db, dbname, docid, refid, type)
     }
 
     # attach rtxt node to new doc node - this is a way of bypassing the ref node
-    log_data("i:", i, "connect rtxt with new doc node - refdocid:", d1$refdocid[i])
+    logdata("i:", i, "connect rtxt with new doc node - refdocid:", d1$refdocid[i])
     q1 <- paste0("match (n:", dbname, ":", RTXTNODE, " {docid:'", docid, "', type:'", d1$type[i], "', linenumber:'", d1$linenumber[i], "' }), ", 
                  "(m:", dbname, ":", DOCNODE, "{ docid:'", d1$refdocid[i], "'})", 
                  "merge (n)-[r:", RTXT_DOC_REL, "]->(m) ",
@@ -346,7 +348,7 @@ build_claims_graph <- function(db, dbname, docid, type)
                       "where c.docid=", docid, " ;"))
 
   if(nrow(d1) == 0) {
-    log_data("WARNING - build_claims_graph() - no data for docid:", docid)
+    logdata("WARNING - build_claims_graph() - no data for docid:", docid)
     return(NULL)
   }
   
@@ -356,7 +358,7 @@ build_claims_graph <- function(db, dbname, docid, type)
   # they are still needed for the claims graph.
 
   for(i in seq_len(nrow(d1))) {
-    log_data("i:", i, "|docid:", d1$docid[i], "|type:", d1$type[i], "|linenumber:", d1$linenumber[i], "|text:", substring(d1$text[i], 1, 30))
+    logdata("i:", i, "|docid:", d1$docid[i], "|type:", d1$type[i], "|linenumber:", d1$linenumber[i], "|text:", substring(d1$text[i], 1, 30))
     query_all <- as.character(NULL)
 
     if(d1$parentlinenumber[i] == 0) {
@@ -380,7 +382,7 @@ build_claims_graph <- function(db, dbname, docid, type)
         
     } else {
       # we have a parent node, so therefore create/merge and connect to the parent node
-      log_data("i:", i, "|docid:", d1$parentdocid[i], "|type:", d1$parenttype[i], "|linenumber:", d1$parentlinenumber[i], 
+      logdata("i:", i, "|docid:", d1$parentdocid[i], "|type:", d1$parenttype[i], "|linenumber:", d1$parentlinenumber[i], 
         "|text:", substring(d1$parenttext[i], 1, 30))
       (q1 <- paste0("merge (n:", dbname, ":", RTXTNODE, " {",
                     "docid:'", d1$docid[i], "', ", 
@@ -412,7 +414,7 @@ build_img_node <- function(db, dbname, docid)
   d1 <- calldb(paste0("select distinct * from images where docid='", docid, "' ;" ))
   
   if(nrow(d1) == 0) {
-    log_data("WARNING - no images for docid:", docid)
+    logdata("WARNING - no images for docid:", docid)
     return(NULL)
   }
   
@@ -462,7 +464,7 @@ build_txt_for_caps_node <- function(db, dbname, docid, type='sent')
   if(length(index) != 0) d1 <- d1[-index,]
   
   if(nrow(d1) == 0) {
-    log_data("WARNING - no image text for docid:", docid)
+    logdata("WARNING - no image text for docid:", docid)
     return(NULL)
   }
   
@@ -475,7 +477,7 @@ build_txt_for_caps_node <- function(db, dbname, docid, type='sent')
                   "docid:'", d1$docid[i], "', ", 
                   "type:'", d1$type[i], "', ", 
                   "linenumber:'", d1$linenumber[i], "', ", 
-                  "text:\"", d1$text[i], "\" ", 
+                  "text:'\"", d1$text[i], "\"' ", 
                   "}) ",
                   "on create set n.count = 1 ",
                   "on match set n.count = n.count+1 "))
@@ -493,8 +495,8 @@ build_txt_for_caps_node <- function(db, dbname, docid, type='sent')
     tryCatch( {
       cypher(db, query_all) 
     }, error = function( e ) {
-      log_data("ERROR - bad cypher - docid:", docid, "  i:", i)
-      log_data("ERROR - cypher error message:", conditionMessage(e))
+      logdata("ERROR - bad cypher - docid:", docid, "  i:", i)
+      logdata("ERROR - cypher error message:", conditionMessage(e))
     }) # tryCatch ...
     
     #cypher(db, query_all) 
@@ -513,7 +515,7 @@ build_cap_node <- function(db, dbname, docid, type='sent')
   #if(length(index) != 0) d1 <- d1[-index,]
   
   if(nrow(d1) == 0) {
-    log_data("WARNING - no references for docid:", docid)
+    logdata("WARNING - no references for docid:", docid)
     return(NULL)
   }
   
@@ -592,9 +594,9 @@ build_graph <- function(db, dbname, docid, type='sent')
 if(0) {
   pdfDocs <- inputdf$pdfDocs
 }
-loop_on_docs_for_g50 <- function(pdfDocs)
+loop_on_docs_for_g50 <- function(pdfDocs, dbname='arg3', host='local', delete_db=F)
 {
-  dblist <- initialize_neo4j(dbname='arg3', host='AWS', delete_db=F)
+  dblist <- initialize_neo4j(dbname=dbname, host=host, delete_db=delete_db)
   db <- dblist$db
   dbname <- dblist$dbname
   summary1(db, dbname)
@@ -603,7 +605,7 @@ loop_on_docs_for_g50 <- function(pdfDocs)
     # pdfDocs is not NA, then make sure that the file exists in the database before we proceed
     x1 <- calldb(paste0("select filename from docs where filename = '", pdfDocs, "';"))
     if(nrow(x1) == 0) {
-      log_data("Error: file ", pdfDocs, "does not exists in the database - exiting")
+      logdata("Error: file ", pdfDocs, "does not exists in the database - exiting")
       return(NULL)
     }
   }
@@ -617,11 +619,11 @@ loop_on_docs_for_g50 <- function(pdfDocs)
     docid <-  docinfo$docid[1]
 
     if(nrow(docinfo) == 0) {
-      log_data("WARNING - did not find a document in the database for docname:", doc)
+      logdata("WARNING - did not find a document in the database for docname:", doc)
       next ;
     }
-    log_data("-------------------------------------------------------------------------")
-    log_data(i, " docid:", docid, " document in graphing process: ", doc)
+    logdata("-------------------------------------------------------------------------")
+    logdata(i, " docid:", docid, " document in graphing process: ", doc)
 
     build_graph(db, dbname, docid)
   }
@@ -636,10 +638,10 @@ if(0) {
 }
 create_graph_on_docid <- function(docid, delete_db=F, massCATS=F, AWS=F)
 {
-  log_data("docid    :", docid)
-  log_data("delete_db:", delete_db)
-  log_data("massCATS :", massCATS)
-  log_data("AWS      :", AWS)
+  logdata("docid    :", docid)
+  logdata("delete_db:", delete_db)
+  logdata("massCATS :", massCATS)
+  logdata("AWS      :", AWS)
 
   if(AWS) {
     dblist <- initialize_neo4j(dbname='arg2', host='AWS', delete_db=delete_db)
@@ -650,7 +652,7 @@ create_graph_on_docid <- function(docid, delete_db=F, massCATS=F, AWS=F)
   db <- dblist$db
   dbname <- dblist$dbname
   cypher(db, paste0("match (n:", dbname, ") return count(n);"))
-  log_data("neo4j database name:", dbname)
+  logdata("neo4j database name:", dbname)
 
   #  docid=2878; type='paragraph'
 
@@ -662,21 +664,21 @@ create_graph_on_docid <- function(docid, delete_db=F, massCATS=F, AWS=F)
 usage <- function()
 {
 
-  log_data("usage")
-  log_data("  ./graph.r <blank>                          : print this message ")
-  log_data("  ./graph.r all                              : do all g50-type files normally ")
-  log_data("  ./graph.r dir/file                         : do one single g50-type file")
-  log_data("  ./graph.r docid=2878                       : do one specific file but use the docid instead")
-  log_data("  ./graph.r docid=2878 massCATS              : do one massCATS (Haggerty) type file")
-  log_data("  ./graph.r docid=2878 massCATS AWS          : do one massCATS (Haggerty) type file into the AWS installation")
-  log_data("  ./graph.r docid=2878 delete_db massCATS AWS: do one massCATS (Haggerty) type file into the AWS installation, delete_db")
+  logdata("usage")
+  logdata("  ./graph.r <blank>                          : print this message ")
+  logdata("  ./graph.r all                              : do all g50-type files normally ")
+  logdata("  ./graph.r dir/file                         : do one single g50-type file")
+  logdata("  ./graph.r docid=2878                       : do one specific file but use the docid instead")
+  logdata("  ./graph.r docid=2878 massCATS              : do one massCATS (Haggerty) type file")
+  logdata("  ./graph.r docid=2878 massCATS AWS          : do one massCATS (Haggerty) type file into the AWS installation")
+  logdata("  ./graph.r docid=2878 delete_db massCATS AWS: do one massCATS (Haggerty) type file into the AWS installation, delete_db")
 }
 
 #####################################################################################
 # MAIN main Main
 #
 
-log_data("==================== START OF RUN =================")
+logdata("==================== START OF RUN =================")
 process_time_total <- proc.time()
 
 inputdf <- data.frame(
@@ -724,8 +726,8 @@ if(length(inputopt) >= 6) {
     if(tolower(filenamex) == 'all') {
       inputdf$process_type <- 'file'
     } else if(!file.exists(filenamex))  {
-      log_data("Error: file", filenamex, "does not exists - exiting")
-      log_data("NOTE - we need absolute addresses to files")
+      logdata("Error: file", filenamex, "does not exists - exiting")
+      logdata("NOTE - we need absolute addresses to files")
     } else {
       inputdf$pdfDocs <- basename(filenamex)
       inputdf$pdfDir <- dirname(filenamex)
@@ -733,7 +735,7 @@ if(length(inputopt) >= 6) {
     }
   } 
 } else if( length( inputopt ) != 6 ) {
-  #log_data("Do all files")
+  #logdata("Do all files")
   #inputdf$process_type <- 'file'
   usage()
   quit()
@@ -743,10 +745,10 @@ if(inputdf$process_type == 'docid') {
   if(!is.na(inputdf$docid)) {
     create_graph_on_docid(inputdf$docid, delete_db=inputdf$delete_db, massCATS=inputdf$massCATS, AWS=inputdf$AWS)
   } else {
-    log_data("Error: docid is not valid")
+    logdata("Error: docid is not valid")
   }
 } else if(inputdf$process_type == 'file') {
-  loop_on_docs_for_g50(inputdf$pdfDocs)
+  loop_on_docs_for_g50(inputdf$pdfDocs, dbname='arg3', host='local', delete_db=T)
 }
 
 # the following passage splits the rows up in chunks of 100.  This is to 
@@ -755,7 +757,7 @@ s <- proc.time()[3] - process_time_total[3]
 s <- as.integer(s)
 h <- s %/% 3600 ; s <- s - (h*3600) ; 
 m <- s %/% 60   ; s <- s - (m*60)   ; 
-log_data("")
-log_data(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
-log_data("==================== END OF RUN =================")
+logdata("")
+logdata(sprintf("process time: %d hours %d minutes %d seconds", h, m, s))
+logdata("==================== END OF RUN =================")
 
